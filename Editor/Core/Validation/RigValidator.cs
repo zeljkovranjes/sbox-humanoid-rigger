@@ -1,4 +1,6 @@
+#nullable enable annotations
 using System.Numerics;
+using System.Threading.Tasks;
 namespace HumanoidRigger;
 using Vector3 = System.Numerics.Vector3;
 
@@ -26,6 +28,9 @@ public static class RigValidator
         return SurfaceRepair.Improve(character,rig,WeightRepair.Improve(character,rig,report));
     }
     public static ValidationReport Validate(ImportedCharacter character,GeneratedRig rig)
+        =>Validate(character,rig,null);
+
+    internal static ValidationReport Validate(ImportedCharacter character,GeneratedRig rig,BindTriangle[][]? faces)
     {
         var height=character.AnatomicalHeight;var r=new ValidationReport();void Error(string code,string text)=>r.Issues.Add(new(code,text,true));
         try{rig.Profile.Validate();}catch(Exception e){Error("profile",e.Message);return r;}
@@ -70,46 +75,70 @@ public static class RigValidator
                 }
         }
         if(r.Issues.Any(i=>i.Error))return r;
-        foreach(var pose in Deformation.Poses)
+        faces??=character.Meshes.Select(BindTriangle.Measure).ToArray();
+        var specifications=Deformation.Poses.ToArray();
+        var tests=new StressResult[specifications.Length];
+        Vector3[][] Buffers()=>character.Meshes.Select(m=>new Vector3[m.Vertices.Length]).ToArray();
+        void Measure(int i,Vector3[][] buffer)
         {
-            if(!Deformation.IsApplicable(pose,roles)){r.Issues.Add(new("optional-pose",$"{pose.Name}: optional joints absent.",false));continue;}
-            var deformed=Deformation.Pose(character,rig,pose);float stretch=1,minArea=1,sourceEdge=0,deformedEdge=0;int nonFinite=0,invalidMeasurements=0;
-            var rotations=Deformation.BoneTransforms(rig,Deformation.JointRotations(rig,pose)).Rotations;
-            int reversed=0;double surfaceArea=0,reversedArea=0;
-            for(int p=0;p<character.Meshes.Length;p++)
-            {
-                var mesh=character.Meshes[p];var dst=deformed[p];nonFinite+=dst.Count(v=>!Geometry.Finite(v));
-                for(int t=0;t<mesh.Triangles.Length;t+=3)
-                {
-                    var i=mesh.Triangles[t];var j=mesh.Triangles[t+1];var k=mesh.Triangles[t+2];
-                    var normal=Vector3.Cross(mesh.Vertices[j]-mesh.Vertices[i],mesh.Vertices[k]-mesh.Vertices[i]);
-                    var posedNormal=Vector3.Cross(dst[j]-dst[i],dst[k]-dst[i]);
-                    float area=normal.Length(),posedArea=posedNormal.Length();
-                    if(!float.IsFinite(area)||!float.IsFinite(posedArea))invalidMeasurements++;
-                    else if(area>height*height*1e-10f)
-                    {
-                        float ratio=posedArea/area;
-                        if(float.IsFinite(ratio))minArea=Math.Min(minArea,ratio);else invalidMeasurements++;
-                        surfaceArea+=area;
-                        float alignment=SurfaceOrientation.Alignment(normal,posedNormal,rig.Weights[p][i],rig.Weights[p][j],rig.Weights[p][k],rotations);
-                        if(alignment<SurfaceOrientation.ReversalLimit){reversed++;reversedArea+=area;}
-                    }
-                    foreach(var (a,b) in new[]{(i,j),(j,k),(k,i)})
-                    {
-                        var length=Vector3.Distance(mesh.Vertices[a],mesh.Vertices[b]);var posedLength=Vector3.Distance(dst[a],dst[b]);
-                        if(!float.IsFinite(length)||!float.IsFinite(posedLength)){invalidMeasurements++;continue;}
-                        if(length<=height*1e-6f)continue;
-                        float ratio=posedLength/length;
-                        if(!float.IsFinite(ratio)){invalidMeasurements++;continue;}
-                        if(ratio>stretch){stretch=ratio;sourceEdge=length;deformedEdge=posedLength;}
-                    }
-                }
-            }
-            r.StressTests.Add(new(pose.Name,stretch,minArea,nonFinite,sourceEdge,deformedEdge,invalidMeasurements,reversed,surfaceArea>0?(float)(reversedArea/surfaceArea):0));
-            if(reversed>0)r.Issues.Add(new("surface-reversal",$"{pose.Name}: {reversed} surface triangles reverse orientation.",false));
-            if(nonFinite>0||invalidMeasurements>0)Error("deformation",$"{pose.Name}: deformation produced non-finite coordinates or measurements.");
-            else if(stretch>4||minArea<.025f)Error("deformation",$"{pose.Name}: unsafe deformation (stretch {stretch:F2}, area ratio {minArea:F3}).");
+            if(Deformation.IsApplicable(specifications[i],roles))tests[i]=MeasurePose(character,rig,specifications[i],faces,buffer,height);
+        }
+        // Poses read the same frozen weights and write separate buffers. Keep
+        // report order and each pose's arithmetic serial and deterministic.
+        int workers=character.Meshes.Sum(m=>m.Vertices.Length)>=8192?Math.Min(4,Math.Max(1,Environment.ProcessorCount/2)):1;
+        if(workers==1)
+        {
+            var buffer=Buffers();for(int i=0;i<specifications.Length;i++)Measure(i,buffer);
+        }
+        else Parallel.For(0,specifications.Length,new ParallelOptions{MaxDegreeOfParallelism=workers},Buffers,
+            (i,_,buffer)=>{Measure(i,buffer);return buffer;},_=>{});
+        for(int i=0;i<specifications.Length;i++)
+        {
+            var pose=specifications[i];var test=tests[i];
+            if(test is null){r.Issues.Add(new("optional-pose",$"{pose.Name}: optional joints absent.",false));continue;}
+            r.StressTests.Add(test);
+            if(test.ReversedTriangles>0)r.Issues.Add(new("surface-reversal",$"{pose.Name}: {test.ReversedTriangles} surface triangles reverse orientation.",false));
+            if(test.NonFiniteVertices>0||test.NonFiniteMeasurements>0)Error("deformation",$"{pose.Name}: deformation produced non-finite coordinates or measurements.");
+            else if(test.MaximumStretch>4||test.MinimumAreaRatio<.025f)Error("deformation",$"{pose.Name}: unsafe deformation (stretch {test.MaximumStretch:F2}, area ratio {test.MinimumAreaRatio:F3}).");
         }
         return r;
+    }
+    static StressResult MeasurePose(ImportedCharacter character,GeneratedRig rig,StressPose pose,BindTriangle[][] faces,Vector3[][] deformed,float height)
+    {
+        var transforms=Deformation.BoneTransforms(rig,Deformation.JointRotations(rig,pose));
+        var rotations=transforms.Rotations;
+        Deformation.ApplyTransforms(character,rig,transforms.Positions,rotations,deformed);
+        float stretch=1,minArea=1,sourceEdge=0,deformedEdge=0;int nonFinite=0,invalidMeasurements=0;
+        int reversed=0;double surfaceArea=0,reversedArea=0;
+        for(int p=0;p<character.Meshes.Length;p++)
+        {
+            var mesh=character.Meshes[p];var dst=deformed[p];nonFinite+=dst.Count(v=>!Geometry.Finite(v));
+            foreach(var face in faces[p])
+            {
+                var i=face.A;var j=face.B;var k=face.C;
+                var normal=face.Normal;
+                var posedNormal=Vector3.Cross(dst[j]-dst[i],dst[k]-dst[i]);
+                float area=face.Area,posedArea=posedNormal.Length();
+                if(!float.IsFinite(area)||!float.IsFinite(posedArea))invalidMeasurements++;
+                else if(area>height*height*1e-10f)
+                {
+                    float ratio=posedArea/area;
+                    if(float.IsFinite(ratio))minArea=Math.Min(minArea,ratio);else invalidMeasurements++;
+                    surfaceArea+=area;
+                    float alignment=SurfaceOrientation.Alignment(normal,posedNormal,rig.Weights[p][i],rig.Weights[p][j],rig.Weights[p][k],rotations);
+                    if(alignment<SurfaceOrientation.ReversalLimit){reversed++;reversedArea+=area;}
+                }
+                for(int edge=0;edge<3;edge++)
+                {
+                    var (a,b,length)=face.Edge(edge);var posedLength=Vector3.Distance(dst[a],dst[b]);
+                    if(!float.IsFinite(length)||!float.IsFinite(posedLength)){invalidMeasurements++;continue;}
+                    if(length<=height*1e-6f)continue;
+                    float ratio=posedLength/length;
+                    if(!float.IsFinite(ratio)){invalidMeasurements++;continue;}
+                    if(ratio>stretch){stretch=ratio;sourceEdge=length;deformedEdge=posedLength;}
+                }
+            }
+        }
+        return new(pose.Name,stretch,minArea,nonFinite,sourceEdge,deformedEdge,invalidMeasurements,reversed,surfaceArea>0?(float)(reversedArea/surfaceArea):0);
     }
 }

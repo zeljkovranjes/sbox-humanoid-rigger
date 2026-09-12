@@ -22,6 +22,14 @@ public static class Skinning
         for(int part=0;part<character.Meshes.Length;part++)
         {
             var mesh=character.Meshes[part];var neighbors=Geometry.Neighbors(mesh,height*(useRegionSeeds?1e-5f:1e-6f));var count=mesh.Vertices.Length;
+            // Geometry stays fixed throughout the distance solve and diffusion.
+            // Retain neighbor order so cached coefficients preserve summation order.
+            var edges=neighbors.Select((row,v)=>row.Select(n=>
+            {
+                float length=Vector3.Distance(mesh.Vertices[v],mesh.Vertices[n]);
+                return(Node:n,Length:length,Conductance:1/Math.Max(length,height*.001f));
+            }).ToArray()).ToArray();
+            var denominators=edges.Select(row=>{float sum=0;foreach(var edge in row)sum+=edge.Conductance;return sum;}).ToArray();
             var components=useRegionSeeds?Geometry.Components(neighbors):new int[count];int componentCount=components.Max()+1;
             var digits=SkinRegions.DetachedDigits(mesh,neighbors,rig.Anatomy);
             var field=new float[count][];var seeds=new float[count][];
@@ -57,9 +65,9 @@ public static class Skinning
                 while(queue.TryDequeue(out var v,out float distance))
                 {
                     if(distance>values[v])continue;
-                    foreach(var n in neighbors[v])
+                    foreach(var edge in edges[v])
                     {
-                        float next=distance+Vector3.Distance(mesh.Vertices[v],mesh.Vertices[n]);
+                        int n=edge.Node;float next=distance+edge.Length;
                         if(next<values[n]){values[n]=next;queue.Enqueue(n,next);}
                     }
                 }
@@ -90,24 +98,19 @@ public static class Skinning
                 for(int b=0;b<bones.Length;b++) weights[b]/=total;
                 seeds[v]=weights;field[v]=(float[])weights.Clone();
             }
+            var nextField=Enumerable.Range(0,count).Select(_=>new float[bones.Length]).ToArray();
             for(int iteration=0;iteration<12;iteration++)
             {
-                var next=new float[count][];
                 for(int v=0;v<count;v++)
                 {
-                    next[v]=new float[bones.Length];
                     for(int b=0;b<bones.Length;b++)
                     {
-                        float sum=0,denominator=0;
-                        foreach(var n in neighbors[v])
-                        {
-                            float edge=1/Math.Max(Vector3.Distance(mesh.Vertices[v],mesh.Vertices[n]),height*.001f);
-                            sum+=field[n][b]*edge;denominator+=edge;
-                        }
-                        next[v][b]=.45f*seeds[v][b]+.55f*(denominator>0 ? sum/denominator : field[v][b]);
+                        float sum=0,denominator=denominators[v];
+                        foreach(var edge in edges[v])sum+=field[edge.Node][b]*edge.Conductance;
+                        nextField[v][b]=.45f*seeds[v][b]+.55f*(denominator>0 ? sum/denominator : field[v][b]);
                     }
                 }
-                field=next;
+                (field,nextField)=(nextField,field);
             }
             result[part]=field.Select(w=>Cleanup(w.Select((weight,bone)=>new Influence(bone,weight)),bones.Length,rig.Profile.MaximumInfluences)).ToArray();
         }

@@ -2,6 +2,7 @@
 namespace HumanoidRigger;
 using Vector3=System.Numerics.Vector3;
 using Quaternion=System.Numerics.Quaternion;
+using Face=HumanoidRigger.BindTriangle;
 
 /// <summary>Bounded local weight trials for reversed surfaces. Cached poses keep
 /// trials proportional to the edited region; accepted weights receive a full retest.</summary>
@@ -9,8 +10,12 @@ public static class SurfaceRepair
 {
     const int TransferRounds=8;
     const int TransfersPerNeighborhood=1536;
-    readonly record struct Face(int A,int B,int C,Vector3 Normal,float Area);
-    sealed record Pose(StressResult Stress,Vector3[][] Points,Vector3[] Bones,Quaternion[] Rotations,HashSet<(int Part,int Face)> Reversed);
+    sealed record Pose(StressResult Stress,Vector3[][] Points,Vector3[] Bones,Quaternion[] Rotations,HashSet<(int Part,int Face)> Reversed)
+    {
+        // Only the accepted rig changes this baseline. Candidate trials can share
+        // its measurements; a commit invalidates every face touched by the edit.
+        public Dictionary<(int Part,int Face),(float Alignment,float VolumeRatio)> Measurements {get;}=[];
+    }
 
     public static ValidationReport Improve(ImportedCharacter character,GeneratedRig rig,ValidationReport initial)
         =>Improve(character,rig,initial,null);
@@ -26,11 +31,7 @@ public static class SurfaceRepair
         if(!WeightRepair.HasCompleteEvidence(initial,specifications.Select(p=>p.Name).Order().ToArray())||
             !initial.StressTests.Select(p=>p.Pose).SequenceEqual(specifications.Select(p=>p.Name)))return initial;
         float height=character.AnatomicalHeight,minimumArea=height*height*1e-10f;
-        var faces=character.Meshes.Select(m=>Enumerable.Range(0,m.Triangles.Length/3).Select(t=>
-        {
-            int a=m.Triangles[t*3],b=m.Triangles[t*3+1],c=m.Triangles[t*3+2];
-            var normal=Vector3.Cross(m.Vertices[b]-m.Vertices[a],m.Vertices[c]-m.Vertices[a]);return new Face(a,b,c,normal,normal.Length());
-        }).ToArray()).ToArray();
+        var faces=character.Meshes.Select(Face.Measure).ToArray();
         var neighbors=character.Meshes.Select(m=>Geometry.Neighbors(m)).ToArray();
         var touching=character.Meshes.Select(m=>m.Vertices.Select(_=>new List<int>()).ToArray()).ToArray();
         for(int p=0;p<faces.Length;p++)for(int t=0;t<faces[p].Length;t++)foreach(int v in new[]{faces[p][t].A,faces[p][t].B,faces[p][t].C})touching[p][v].Add(t);
@@ -158,7 +159,7 @@ public static class SurfaceRepair
                 }
             }
             if(accepted==0)return initial;
-            var result=RigValidator.Validate(character,rig);
+            var result=RigValidator.Validate(character,rig,faces);
             if(!result.Passed||!result.StressTests.Select(p=>p.Pose).SequenceEqual(initial.StressTests.Select(p=>p.Pose))||
                 result.StressTests.Zip(initial.StressTests).Any(p=>p.First.ReversedTriangles>p.Second.ReversedTriangles||p.First.ReversedAreaFraction>p.Second.ReversedAreaFraction+1e-7f))
             {rig.Weights=original;return initial;}
@@ -249,7 +250,11 @@ public static class SurfaceRepair
                     // A reversed face can have a large unsigned area. Preserve
                     // the validator's collapse limit, not that invalid baseline area.
                     float ratio=normal.Length()/f.Area;if(!float.IsFinite(ratio)||ratio<.025f)return false;
-                    var previousMeasure=SurfaceOrientation.Measure(f.Normal,Vector3.Cross(pose.Points[part][f.B]-pose.Points[part][f.A],pose.Points[part][f.C]-pose.Points[part][f.A]),rig.Weights[part][f.A],rig.Weights[part][f.B],rig.Weights[part][f.C],pose.Rotations);
+                    if(!pose.Measurements.TryGetValue((part,t),out var previousMeasure))
+                    {
+                        previousMeasure=SurfaceOrientation.Measure(f.Normal,Vector3.Cross(pose.Points[part][f.B]-pose.Points[part][f.A],pose.Points[part][f.C]-pose.Points[part][f.A]),rig.Weights[part][f.A],rig.Weights[part][f.B],rig.Weights[part][f.C],pose.Rotations);
+                        pose.Measurements.Add((part,t),previousMeasure);
+                    }
                     var nextMeasure=SurfaceOrientation.Measure(f.Normal,normal,candidate[f.A],candidate[f.B],candidate[f.C],pose.Rotations);
                     float previous=previousMeasure.Alignment,next=nextMeasure.Alignment;
                     if(!float.IsFinite(previous)||!float.IsFinite(next)||!float.IsFinite(previousMeasure.VolumeRatio)||!float.IsFinite(nextMeasure.VolumeRatio))return false;
@@ -257,9 +262,9 @@ public static class SurfaceRepair
                     oldDeficit+=f.Area/(height*height)*Math.Max(0,-previous);newDeficit+=f.Area/(height*height)*Math.Max(0,-next);
                     oldVolume+=f.Area/(height*height)*Math.Max(0,-previousMeasure.VolumeRatio);newVolume+=f.Area/(height*height)*Math.Max(0,-nextMeasure.VolumeRatio);
                 }
-                foreach(var (v,n) in new[]{(f.A,f.B),(f.B,f.C),(f.C,f.A)})
+                for(int edge=0;edge<3;edge++)
                 {
-                    float length=Vector3.Distance(character.Meshes[part].Vertices[v],character.Meshes[part].Vertices[n]);if(length<=height*1e-6f)continue;
+                    var (v,n,length)=f.Edge(edge);if(length<=height*1e-6f)continue;
                     float stretch=Vector3.Distance(Point(v),Point(n))/length;
                     if(!float.IsFinite(stretch)||stretch>Math.Min(4,pose.Stress.MaximumStretch*1.01f))return false;
                 }
@@ -273,7 +278,8 @@ public static class SurfaceRepair
         for(int i=0;i<poses.Length;i++)
         {
             foreach(var p in updates[i])poses[i].Points[part][p.Key]=p.Value;
-            foreach(int t in triangles)poses[i].Reversed.Remove((part,t));foreach(int t in reversals[i])poses[i].Reversed.Add((part,t));
+            foreach(int t in triangles){poses[i].Reversed.Remove((part,t));poses[i].Measurements.Remove((part,t));}
+            foreach(int t in reversals[i])poses[i].Reversed.Add((part,t));
         }
         return true;
     }

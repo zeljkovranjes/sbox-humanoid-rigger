@@ -12,6 +12,7 @@ public static class WeightRepair
         double bestScore=Score(initial,expectedPoses);
         if(!double.IsFinite(bestScore))return initial;
         var adjacency=character.Meshes.Select(m=>Geometry.Neighbors(m)).ToArray();float height=character.AnatomicalHeight;var best=initial;
+        var faces=character.Meshes.Select(BindTriangle.Measure).ToArray();
         for(int iteration=0;iteration<64;iteration++)
         {
             var affected=character.Meshes.Select(m=>new HashSet<int>()).ToArray();
@@ -23,13 +24,13 @@ public static class WeightRepair
                 for(int part=0;part<character.Meshes.Length;part++)
                 {
                     var mesh=character.Meshes[part];var dst=posed[part];
-                    for(int t=0;t<mesh.Triangles.Length;t+=3)
+                    foreach(var face in faces[part])
                     {
-                        int a=mesh.Triangles[t],b=mesh.Triangles[t+1],c=mesh.Triangles[t+2];
-                        float area=Vector3.Cross(mesh.Vertices[b]-mesh.Vertices[a],mesh.Vertices[c]-mesh.Vertices[a]).Length();
+                        int a=face.A,b=face.B,c=face.C;
+                        float area=face.Area;
                         bool bad=area>height*height*1e-10f&&Vector3.Cross(dst[b]-dst[a],dst[c]-dst[a]).Length()/area<.03f;
-                        foreach(var (v,n) in new[]{(a,b),(b,c),(c,a)})
-                        {float length=Vector3.Distance(mesh.Vertices[v],mesh.Vertices[n]);if(length>height*1e-6f&&Vector3.Distance(dst[v],dst[n])/length>3.8f)bad=true;}
+                        for(int edge=0;edge<3;edge++)
+                        {var (v,n,length)=face.Edge(edge);if(length>height*1e-6f&&Vector3.Distance(dst[v],dst[n])/length>3.8f)bad=true;}
                         if(bad){affected[part].Add(a);affected[part].Add(b);affected[part].Add(c);}
                     }
                 }
@@ -50,7 +51,7 @@ public static class WeightRepair
             }
             if(changed==0)break;
             rig.Weights=candidate;ValidationReport report;
-            try{report=RigValidator.Validate(character,rig);}
+            try{report=RigValidator.Validate(character,rig,faces);}
             catch{rig.Weights=old;throw;}
             double score=Score(report,expectedPoses);
             if(score>=bestScore){rig.Weights=old;break;}

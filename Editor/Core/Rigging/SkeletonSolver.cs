@@ -44,6 +44,12 @@ public static class SkeletonSolver
 {
     public static GeneratedRig Fit(ImportedCharacter character,Anatomy anatomy,RigProfile profile)
     {
+        var rig=FitWithHandPrior(character,anatomy,profile);
+        rig.Report=TorsoWeightRepair.Improve(character,rig,rig.Report);
+        return rig;
+    }
+    static GeneratedRig FitWithHandPrior(ImportedCharacter character,Anatomy anatomy,RigProfile profile)
+    {
         var changes=anatomy.GeometricHandPoints.Where(p=>anatomy.Points.TryGetValue(p.Key,out var current)&&!current.Corrected&&current.Position!=p.Value.Position).ToArray();
         if(changes.Length==0)return FitGeometry(character,anatomy,profile);
         var geometry=anatomy.Copy();

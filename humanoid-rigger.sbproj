@@ -1,0 +1,10 @@
+{
+  "Title": "Humanoid Rigger",
+  "Type": "library",
+  "Org": "local",
+  "Ident": "chomnr_humanoid_rigger",
+  "Schema": 1,
+  "IncludeSourceFiles": true,
+  "PackageReferences": [],
+  "Metadata": { "Summary": "Humanoid rigging editor with automatic landmarks and validation." }
+}

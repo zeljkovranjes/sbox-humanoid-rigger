@@ -1,0 +1,19 @@
+**/bin/
+**/obj/
+.vs/
+.bin/
+/dev/
+*.user
+# Local automation and procedural fixtures are not part of the library.
+/Editor/UI/Automation.cs
+/Editor/UI/Testing/
+/Editor/Core/Testing/
+# Generated editor project and machine-specific launch settings.
+*.csproj
+/Editor/Properties/launchSettings.json
+# Keep development notes local; ship required third-party notices.
+/docs/*
+!/docs/third-party/
+example.png
+image.webp
+centerline.png

@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Humanoid Rigger</title>
+  <desc id="desc">A humanoid rig in a T-pose, with orange joints inside the Humanoid Retargeter suite's crosshairs.</desc>
+  <rect width="1024" height="1024" rx="164" fill="#181920"/>
+
+  <g fill="none" stroke="#57585D" stroke-width="17" stroke-linecap="round">
+    <path d="M118 368 A420 420 0 0 1 368 118"/>
+    <path d="M656 118 A420 420 0 0 1 906 368"/>
+    <path d="M906 656 A420 420 0 0 1 656 906"/>
+    <path d="M368 906 A420 420 0 0 1 118 656"/>
+  </g>
+  <path d="M512 60V112 M512 912V966 M60 512H112 M912 512H966"
+        fill="none" stroke="#FF9800" stroke-width="18" stroke-linecap="round"/>
+
+  <g fill="none" stroke="#F0F0F5" stroke-width="30" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M512 320V520"/>
+    <path d="M220 352H420L512 332L604 352H804"/>
+    <path d="M512 520L464 550L444 660L420 790"/>
+    <path d="M512 520L560 550L580 660L604 790"/>
+  </g>
+  <circle cx="512" cy="246" r="62" fill="#F0F0F5"/>
+  <g fill="#FF9800">
+    <circle cx="512" cy="320" r="21"/>
+    <circle cx="512" cy="410" r="21"/>
+    <circle cx="420" cy="352" r="21"/>
+    <circle cx="320" cy="352" r="21"/>
+    <circle cx="220" cy="352" r="21"/>
+    <circle cx="604" cy="352" r="21"/>
+    <circle cx="704" cy="352" r="21"/>
+    <circle cx="804" cy="352" r="21"/>
+    <circle cx="444" cy="660" r="21"/>
+    <circle cx="420" cy="790" r="21"/>
+    <circle cx="580" cy="660" r="21"/>
+    <circle cx="604" cy="790" r="21"/>
+  </g>
+  <circle cx="512" cy="520" r="30" fill="#FFC140"/>
+</svg>

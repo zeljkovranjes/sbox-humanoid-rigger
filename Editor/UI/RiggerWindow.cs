@@ -128,6 +128,15 @@ public sealed class RiggerWindow : Widget
         if(framedCharacter!=Session.Character||framedStep!=Session.Step){viewport.Frame();framedCharacter=Session.Character;framedStep=Session.Step;}
         var bottom=footerContent.Layout;bottom.Margin=12;bottom.Spacing=8;
         status=bottom.Add(new Label(content){WordWrap=true,Text=Instruction()});
+        if(Session.Step is WizardStep.Centerline or WizardStep.Body)
+        {
+            var importWarnings=Session.Character.ImportWarnings.Where(w=>!w.StartsWith("Detected a Z-up")).ToArray();
+            if(importWarnings.Length>0)
+            {
+                var warning=bottom.Add(new Label(content){Name="ImportMaterialWarning",Text=string.Join("\n",importWarnings),WordWrap=true});
+                warning.SetStyles($"color: {Theme.Yellow.Hex};");
+            }
+        }
         if(Session.Step is WizardStep.Centerline or WizardStep.Body && Session.Anatomy!.UnrecommendedImportPose)
         {
             var warning=bottom.Add(new Label(content){Name="ImportPoseWarning",Text=ImportPose.Warning,WordWrap=true});
@@ -185,10 +194,10 @@ public sealed class RiggerWindow : Widget
         WizardStep.Body=>"Check the points.\nMove any point that is incorrect.",WizardStep.LeftHand=>"Check the left hand.\nMove any incorrect points.",WizardStep.RightHand=>"Check the right hand.\nMove any incorrect points.",WizardStep.Finish=>"Rig Complete\nDrag a bone to test the rig.",
         WizardStep.Validation=>string.Join("\n",Session.Rig!.Report.Issues.Where(i=>i.Error).Select(i=>i.Message)),_=>"Generating rig…"
     };
-    void SelectModel(){var path=EditorUtility.OpenFileDialog("Select model","fbx","");if(!string.IsNullOrEmpty(path))ImportPath(path);}
+    void SelectModel(){var path=EditorUtility.OpenFileDialog("Select model",ModelImporter.FileFilter,"");if(!string.IsNullOrEmpty(path))ImportPath(path);}
     void CreateProfile()
     {
-        var path=EditorUtility.OpenFileDialog("Select rigged character","fbx","");if(string.IsNullOrEmpty(path))return;
+        var path=EditorUtility.OpenFileDialog("Select rigged character","Rigged characters (*.fbx *.gltf *.glb)","");if(string.IsNullOrEmpty(path))return;
         try{new ProfileDialog(this,ModelImporter.Import(path),p=>{Session.SetProfile(p);Build();}).Show();}catch(Exception e){Error(e);}
     }
     void LoadProfile()
@@ -382,10 +391,10 @@ sealed class ModelDropArea:Widget
         this.import=import;AcceptDrops=true;Layout=Layout.Column();Layout.Margin=12;Layout.Spacing=8;Layout.AddStretchCell();
         var row=Layout.AddRow();row.AddStretchCell();var center=row.AddColumn();center.Spacing=12;
         center.Add(new DropFolderIcon(this));
-        center.Add(new Label(this){Text="Please drag and drop a character file here (.fbx)",Alignment=TextFlag.Center});
+        center.Add(new Label(this){Text="Please drag and drop a character file here (.fbx, .obj, .gltf, .glb)",Alignment=TextFlag.Center});
         center.Add(new Label(this){Text="or",Alignment=TextFlag.Center});
         var choice=center.AddRow();choice.AddStretchCell();
-        choice.Add(new Button.Primary("Choose File"){MinimumWidth=120,Clicked=()=>{var path=EditorUtility.OpenFileDialog("Choose File","fbx","");if(!string.IsNullOrEmpty(path))import(path);}});
+        choice.Add(new Button.Primary("Choose File"){MinimumWidth=120,Clicked=()=>{var path=EditorUtility.OpenFileDialog("Choose File",ModelImporter.FileFilter,"");if(!string.IsNullOrEmpty(path))import(path);}});
         choice.AddStretchCell();
         row.AddStretchCell();Layout.AddStretchCell();
     }

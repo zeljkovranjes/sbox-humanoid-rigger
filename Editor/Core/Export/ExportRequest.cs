@@ -2,15 +2,15 @@
 namespace HumanoidRigger;
 
 [Flags]
-public enum ExportFormats { None=0, Fbx=1, Vmdl=2, Both=Fbx|Vmdl }
+public enum ExportFormats { None=0, Fbx=1, Vmdl=2, Gltf=4, Glb=8, Obj=16, Both=Fbx|Vmdl, All=Fbx|Vmdl|Gltf|Glb|Obj }
 
 public sealed record ExportRequest(string FileName,string Directory,ExportFormats Formats=ExportFormats.Both)
 {
     public ExportPlan Plan(string assetsPath,bool hasMaterials)
     {
-        if(Formats==ExportFormats.None||(Formats&~ExportFormats.Both)!=0)throw new FormatException("Select Fbx, Vmdl, or both.");
+        if(Formats==ExportFormats.None||(Formats&~ExportFormats.All)!=0)throw new FormatException("Select at least one export format.");
         var name=FileName.Trim();
-        if(Path.GetExtension(name).ToLowerInvariant() is ".fbx" or ".vmdl")name=Path.GetFileNameWithoutExtension(name);
+        if(Path.GetExtension(name).ToLowerInvariant() is ".fbx" or ".vmdl" or ".gltf" or ".glb" or ".obj")name=Path.GetFileNameWithoutExtension(name);
         if(string.IsNullOrWhiteSpace(name)||name is "." or ".."||name.EndsWith('.')||name.EndsWith(' ')||name.IndexOfAny(Path.GetInvalidFileNameChars())>=0)
             throw new FormatException("Enter a valid filename without a folder path.");
         var device=name.Split('.')[0].ToUpperInvariant();
@@ -20,6 +20,9 @@ public sealed record ExportRequest(string FileName,string Directory,ExportFormat
         if(Formats.HasFlag(ExportFormats.Vmdl)&&!IsInAssets(folder,assetsPath))throw new FormatException("Choose a folder inside this project's Assets folder to save Vmdl files.");
         var files=new List<string>();
         if(Formats.HasFlag(ExportFormats.Fbx))files.Add(Path.Combine(folder,name+".fbx"));
+        if(Formats.HasFlag(ExportFormats.Gltf))files.AddRange([Path.Combine(folder,name+".gltf"),Path.Combine(folder,name+".bin")]);
+        if(Formats.HasFlag(ExportFormats.Glb))files.Add(Path.Combine(folder,name+".glb"));
+        if(Formats.HasFlag(ExportFormats.Obj))files.AddRange([Path.Combine(folder,name+".obj"),Path.Combine(folder,name+".mtl")]);
         if(Formats.HasFlag(ExportFormats.Vmdl))files.AddRange([Path.Combine(folder,name+".dmx"),Path.Combine(folder,name+".vmdl")]);
         return new(name,folder,Formats,files.ToArray(),hasMaterials?Path.Combine(folder,name+"_materials"):null);
     }
@@ -46,6 +49,7 @@ public sealed record ExportRequest(string FileName,string Directory,ExportFormat
 
 public sealed record ExportPlan(string FileName,string Directory,ExportFormats Formats,string[] Files,string? MaterialDirectory)
 {
+    public string[] PrimaryFiles=>Files.Where(p=>Path.GetExtension(p) is ".fbx" or ".vmdl" or ".gltf" or ".glb" or ".obj").ToArray();
     public string PathFor(string extension)=>Path.Combine(Directory,FileName+extension);
     public void EnsureAvailable()
     {

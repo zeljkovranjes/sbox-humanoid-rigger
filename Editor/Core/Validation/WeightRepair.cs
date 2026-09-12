@@ -1,3 +1,4 @@
+#nullable enable annotations
 namespace HumanoidRigger;
 using Vector3=System.Numerics.Vector3;
 
@@ -5,14 +6,16 @@ using Vector3=System.Numerics.Vector3;
 public static class WeightRepair
 {
     public static ValidationReport Improve(ImportedCharacter character,GeneratedRig rig,ValidationReport initial)
+        =>Improve(character,rig,initial,null);
+    internal static ValidationReport Improve(ImportedCharacter character,GeneratedRig rig,ValidationReport initial,ValidationGeometry? geometry)
     {
         if(initial.Passed||initial.Issues.Any(i=>i.Error&&i.Code!="deformation"))return initial;
         var roles=rig.Bones.Select(b=>b.Role).ToHashSet();
         var expectedPoses=Deformation.Poses.Where(p=>Deformation.IsApplicable(p,roles)).Select(p=>p.Name).Order().ToArray();
         double bestScore=Score(initial,expectedPoses);
         if(!double.IsFinite(bestScore))return initial;
-        var adjacency=character.Meshes.Select(m=>Geometry.Neighbors(m)).ToArray();float height=character.AnatomicalHeight;var best=initial;
-        var faces=character.Meshes.Select(BindTriangle.Measure).ToArray();
+        var adjacency=geometry?.Neighbors??character.Meshes.Select(m=>Geometry.Neighbors(m)).ToArray();float height=geometry?.Height??character.AnatomicalHeight;var best=initial;
+        var faces=geometry?.Faces??character.Meshes.Select(BindTriangle.Measure).ToArray();
         for(int iteration=0;iteration<64;iteration++)
         {
             var affected=character.Meshes.Select(m=>new HashSet<int>()).ToArray();
@@ -46,12 +49,12 @@ public static class WeightRepair
                     var weights=new float[rig.Bones.Length];float amount=affected[part].Contains(v)?.55f:.2f;
                     foreach(var influence in old[part][v])weights[influence.Bone]+=influence.Weight*(1-amount);
                     foreach(var n in adjacency[part][v])foreach(var influence in old[part][n])weights[influence.Bone]+=amount*influence.Weight/adjacency[part][v].Count;
-                    candidate[part][v]=Skinning.Cleanup(weights.Select((w,b)=>new Influence(b,w)),rig.Bones.Length,rig.Profile.MaximumInfluences);changed++;
+                    candidate[part][v]=Skinning.Cleanup(weights,rig.Profile.MaximumInfluences);changed++;
                 }
             }
             if(changed==0)break;
             rig.Weights=candidate;ValidationReport report;
-            try{report=RigValidator.Validate(character,rig,faces);}
+            try{report=RigValidator.Validate(character,rig,faces,geometry);}
             catch{rig.Weights=old;throw;}
             double score=Score(report,expectedPoses);
             if(score>=bestScore){rig.Weights=old;break;}

@@ -9,6 +9,9 @@ public sealed class RiggerViewport : SceneRenderingWidget
 {
     readonly Wizard wizard;
     readonly List<SceneModel> models=[];
+    readonly ScenePointLight keyLight,fillLight;
+    Vector3 characterCenter;
+    float characterRadius=180;
     readonly List<Mesh> meshes=[];
     readonly List<Vertex[]> vertexBuffers=[];
     readonly List<Vec[]> normalBuffers=[];
@@ -79,8 +82,8 @@ public sealed class RiggerViewport : SceneRenderingWidget
             Camera=new GameObject(true,"camera").GetOrAddComponent<CameraComponent>(false);
             Camera.BackgroundColor=Theme.ControlBackground;Camera.ZNear=.1f;Camera.ZFar=10000;Camera.FieldOfView=45;Camera.FovAxis=CameraComponent.Axis.Vertical;Camera.Enabled=true;
         }
-        new ScenePointLight(Scene.SceneWorld,new(120,100,160),1000,Color.White*3.5f).ShadowsEnabled=false;
-        new ScenePointLight(Scene.SceneWorld,new(-120,-100,90),1000,Color.White*2).ShadowsEnabled=false;
+        keyLight=new ScenePointLight(Scene.SceneWorld,new(120,100,160),1000,Color.White*3.5f){ShadowsEnabled=false};
+        fillLight=new ScenePointLight(Scene.SceneWorld,new(-120,-100,90),1000,Color.White*2){ShadowsEnabled=false};
         OnPreFrame+=UpdateFrame;
     }
     public static Vector3 Engine(Vec v)=>new(v.Z,-v.X,v.Y);
@@ -94,6 +97,14 @@ public sealed class RiggerViewport : SceneRenderingWidget
             foreach(var model in models)model.Delete();models.Clear();meshes.Clear();vertexBuffers.Clear();normalBuffers.Clear();
             displayedCharacter=wizard.Character;previewRig=null;transition.Reset();showingBind=false;hasCameraFrame=false;
             poseBuffers=wizard.Character?.Meshes.Select(m=>new Vec[m.Vertices.Length]).ToArray();
+            if(wizard.Character is {} character)
+            {
+                characterCenter=Engine((character.Minimum+character.Maximum)*.5f);characterRadius=(character.Maximum-character.Minimum).Length()*.5f;
+                float scale=character.AnatomicalHeight/180;
+                var origin=Engine(new Vec(wizard.Anatomy.SymmetryPlaneX,character.Minimum.Y,wizard.Anatomy["Pelvis"].Z));
+                keyLight.Position=origin+new Vector3(120,100,160)*scale;fillLight.Position=origin+new Vector3(-120,-100,90)*scale;
+                keyLight.Radius=fillLight.Radius=1000*scale;
+            }
         }
         if(wizard.Character is null)return;
         bool upload=positions is not null||!showingBind;
@@ -130,7 +141,7 @@ public sealed class RiggerViewport : SceneRenderingWidget
             if(create)
             {
                 mesh.CreateVertexBuffer(vertices.Length,vertices);
-                var indices=corners?Enumerable.Range(0,source.Triangles.Length).ToArray():source.Triangles;
+                var indices=PreviewIndices(source,corners);
                 if(source.TriangleMaterials.Length>0)
                 {
                     var groups=Enumerable.Range(0,indices.Length/3).GroupBy(t=>source.TriangleMaterials[t]).ToArray();
@@ -157,6 +168,14 @@ public sealed class RiggerViewport : SceneRenderingWidget
         showingBind=positions is null;
         RefreshLandmarks();
         if(wizard.Rig is not null)bones.Draw(wizard.Rig,wizard.Anatomy!,displayedBones,boneRotations);else bones.Clear();
+    }
+    internal static int[] PreviewIndices(MeshPart source,bool corners)
+    {
+        // Engine() reflects canonical X. Reverse each face to keep its front
+        // and authored normal facing outward after that coordinate conversion.
+        var indices=corners?Enumerable.Range(0,source.Triangles.Length).ToArray():(int[])source.Triangles.Clone();
+        for(int t=0;t<indices.Length;t+=3)(indices[t+1],indices[t+2])=(indices[t+2],indices[t+1]);
+        return indices;
     }
     static void UpdateTangents(Vertex[] vertices)
     {
@@ -192,6 +211,10 @@ public sealed class RiggerViewport : SceneRenderingWidget
         Camera.FovAxis=CameraComponent.Axis.Vertical;
         Camera.CustomSize=Size*DpiScale;
         Camera.Viewport=new Vector4(0,0,1,1);
+        // Model units and translations vary by importer. Fit the clipping planes
+        // to the actual scene instead of discarding large characters at 10,000.
+        Camera.ZNear=Math.Max(.001f,cameraDistance*.0001f);
+        Camera.ZFar=Math.Max(Camera.ZNear*100,Vector3.DistanceBetween(Camera.WorldPosition,characterCenter)+characterRadius*2);
         if(framePending&&Width>0&&Height>0){framePending=false;FrameNow();}
         if(cameraAnimating)
         {

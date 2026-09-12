@@ -13,12 +13,12 @@ public static class Deformation
     // Canonical anatomy is +X left, +Y up and +Z toward the toes.
     public static IReadOnlyList<StressPose> Poses =>new[]{
         new StressPose("Neutral","Root",Vector3.UnitY,0),new("Arm raise","UpperArm.L",Vector3.UnitZ,75),new("Shoulder rotation","UpperArm.R",Vector3.UnitY,60),
-        new("Elbow bend","LowerArm.L",Vector3.UnitY,100,PoseAxisSpace.BoneBend),new("Wrist rotation","Hand.L",Vector3.UnitX,45,PoseAxisSpace.BoneTwist),new("Torso bend","SpineLower",Vector3.UnitX,30),
+        new("Elbow bend","LowerArm.L",Vector3.UnitY,-100,PoseAxisSpace.BoneBend),new("Elbow extension (extreme)","LowerArm.L",Vector3.UnitY,100,PoseAxisSpace.BoneBend),new("Wrist rotation","Hand.L",Vector3.UnitX,45,PoseAxisSpace.BoneTwist),new("Torso bend","SpineLower",Vector3.UnitX,30),
         new("Head rotation","Head",Vector3.UnitY,55),new("Hip flexion","UpperLeg.L",Vector3.UnitX,-75),new("Hip extension (extreme)","UpperLeg.L",Vector3.UnitX,75),new("Hip abduction","UpperLeg.R",Vector3.UnitZ,-40),
         new("Hip adduction","UpperLeg.R",Vector3.UnitZ,40),
         new("Right hip flexion","UpperLeg.R",Vector3.UnitX,-75),new("Right hip extension (extreme)","UpperLeg.R",Vector3.UnitX,75),
         new("Left hip abduction","UpperLeg.L",Vector3.UnitZ,40),new("Left hip adduction","UpperLeg.L",Vector3.UnitZ,-40),
-        new("Knee bend","LowerLeg.L",Vector3.UnitX,-100,PoseAxisSpace.BoneBend),new("Ankle movement","Foot.L",Vector3.UnitX,30),new("Finger curl","Index1.L",Vector3.UnitZ,70,PoseAxisSpace.BoneBend),new("Thumb movement","Thumb1.L",Vector3.UnitY,45,PoseAxisSpace.BoneBend),
+        new("Knee bend","LowerLeg.L",Vector3.UnitX,100,PoseAxisSpace.BoneBend),new("Knee extension (extreme)","LowerLeg.L",Vector3.UnitX,-100,PoseAxisSpace.BoneBend),new("Ankle movement","Foot.L",Vector3.UnitX,30),new("Finger curl","Index1.L",Vector3.UnitZ,70,PoseAxisSpace.BoneBend),new("Thumb movement","Thumb1.L",Vector3.UnitY,45,PoseAxisSpace.BoneBend),
         new("Right finger curl","Index1.R",Vector3.UnitZ,-70,PoseAxisSpace.BoneBend),new("Right thumb movement","Thumb1.R",Vector3.UnitY,-45,PoseAxisSpace.BoneBend),
         new("Thumb opposition","Thumb1.L",Vector3.UnitZ,45,PoseAxisSpace.BoneNormal),new("Right thumb opposition","Thumb1.R",Vector3.UnitZ,-45,PoseAxisSpace.BoneNormal),
         Curl("L"),Curl("R"),ThumbCurl("L"),ThumbCurl("R"),

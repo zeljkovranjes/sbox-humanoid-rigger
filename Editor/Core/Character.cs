@@ -8,7 +8,7 @@ public sealed record MeshPart(string Name, Vector3[] Vertices, int[] Triangles, 
     // Triangle-corner channels preserve seams and hard edges without changing the
     // control points or connectivity used by the anatomical and skinning solvers.
     public Vector3[] CornerNormals {get;init;}=[];
-    // FBX texture coordinates use a lower-left origin. Native rendering/DMX invert V.
+    // Canonical texture coordinates use a lower-left origin. Native rendering/DMX invert V.
     public System.Numerics.Vector2[] CornerTexCoords {get;init;}=[];
     System.Numerics.Vector4[] cornerColors=[];
     // Existing editor objects can survive hotload before this optional channel existed.
@@ -26,6 +26,7 @@ public sealed class ImportedCharacter
     public SourceBone[] ExistingBones { get; init; } = [];
     public bool HasExistingSkin { get; init; }
     public string SourcePath {get;init;}="";
+    public string[] ImportWarnings {get;init;}=[];
     public SourceMaterial[] Materials {get;init;}=[];
     public Dictionary<string,byte[]> EmbeddedTextures {get;init;}=new(StringComparer.OrdinalIgnoreCase);
     public int SourceUpAxis { get; init; } = 1;

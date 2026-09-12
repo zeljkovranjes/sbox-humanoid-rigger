@@ -17,6 +17,8 @@ public sealed class ValidationReport
 public static class RigValidator
 {
     public static ValidationReport ValidateAndRepair(ImportedCharacter character,GeneratedRig rig)
+        =>ValidateAndRepair(character,rig,new ValidationGeometry(character));
+    internal static ValidationReport ValidateAndRepair(ImportedCharacter character,GeneratedRig rig,ValidationGeometry geometry)
     {
         int repairs=0;
         foreach(var part in rig.Weights) for(int v=0;v<part.Length;v++)
@@ -24,18 +26,20 @@ public static class RigValidator
             var cleaned=Skinning.Cleanup(part[v],rig.Bones.Length,rig.Profile.MaximumInfluences);
             if(!cleaned.SequenceEqual(part[v])) {part[v]=cleaned;repairs++;}
         }
-        var report=Validate(character,rig);report.Repairs=repairs;
-        return SurfaceRepair.Improve(character,rig,WeightRepair.Improve(character,rig,report));
+        var report=Validate(character,rig,null,geometry);report.Repairs=repairs;
+        return SurfaceRepair.Improve(character,rig,WeightRepair.Improve(character,rig,report,geometry),geometry);
     }
     public static ValidationReport Validate(ImportedCharacter character,GeneratedRig rig)
         =>Validate(character,rig,null);
 
     internal static ValidationReport Validate(ImportedCharacter character,GeneratedRig rig,BindTriangle[][]? faces)
+        =>Validate(character,rig,faces,null);
+    internal static ValidationReport Validate(ImportedCharacter character,GeneratedRig rig,BindTriangle[][]? faces,ValidationGeometry? geometry)
     {
-        var height=character.AnatomicalHeight;var r=new ValidationReport();void Error(string code,string text)=>r.Issues.Add(new(code,text,true));
+        var height=geometry?.Height??character.AnatomicalHeight;var r=new ValidationReport();void Error(string code,string text)=>r.Issues.Add(new(code,text,true));
         try{rig.Profile.Validate();}catch(Exception e){Error("profile",e.Message);return r;}
         var roles=new HashSet<string>();var names=new HashSet<string>();
-        var body=character.Meshes.Where(m=>m.Kind==MeshKind.Body).SelectMany(m=>m.Vertices).ToArray();
+        var body=geometry?.Body??character.Meshes.Where(m=>m.Kind==MeshKind.Body).SelectMany(m=>m.Vertices).ToArray();
         for(int i=0;i<rig.Bones.Length;i++)
         {
             var b=rig.Bones[i];
@@ -43,7 +47,7 @@ public static class RigValidator
             bool validParent=b.Parent<i&&b.Parent>=-1;
             if(!validParent)Error("hierarchy","Invalid skeleton hierarchy.");
             if(!Geometry.Finite(b.Position)||!float.IsFinite(b.Rotation.LengthSquared())||Math.Abs(b.Rotation.LengthSquared()-1)>.001f)Error("frame","Invalid bone orientation or position.");
-            if(b.Deform&&body.Length>0&&body.Min(p=>Vector3.DistanceSquared(p,b.Position))>height*height*.15f*.15f)
+            if(b.Deform&&body.Length>0&&(geometry?.JointDistanceSquared(b.Position)??body.Min(p=>Vector3.DistanceSquared(p,b.Position)))>height*height*.15f*.15f)
                 Error("joint-placement",$"{b.Role} is too far from the character. Check its landmark.");
             var definition=rig.Profile.Bones.FirstOrDefault(d=>d.Role==b.Role);
             if(definition is null || definition.Name!=b.Name || !validParent || (b.Parent<0 ? null : rig.Bones[b.Parent].Role)!=definition.Parent)Error("mapping","Skeleton differs from the selected profile.");
@@ -62,6 +66,7 @@ public static class RigValidator
         }
         if(r.Issues.Any(i=>i.Error))return r;
         var ends=RigGeometry.SegmentEnds(rig);
+        var locality=new SkinningLocality(character,rig,ends);
         for(int p=0;p<character.Meshes.Length;p++)
         {
             var mesh=character.Meshes[p];if(mesh.Kind==MeshKind.Accessory)continue;
@@ -70,12 +75,12 @@ public static class RigValidator
                 foreach(var influence in rig.Weights[p][v])
                 {
                     if(!rig.Bones[influence.Bone].Deform){Error("nondeforming-influence","Skinning references a non-deforming bone.");remote=true;break;}
-                    if(influence.Weight>.05f&&Vector3.Distance(mesh.Vertices[v],Geometry.ClosestOnSegment(mesh.Vertices[v],rig.Bones[influence.Bone].Position,ends[influence.Bone]))>height*.25f)
+                    if(influence.Weight>.05f&&Vector3.Distance(mesh.Vertices[v],Geometry.ClosestOnSegment(mesh.Vertices[v],rig.Bones[influence.Bone].Position,ends[influence.Bone]))>locality.Limit(influence.Bone,mesh.Vertices[v]))
                     {Error("weight-region",$"Mesh '{mesh.Name}' is influenced by a distant anatomical region ({rig.Bones[influence.Bone].Role}).");remote=true;break;}
                 }
         }
         if(r.Issues.Any(i=>i.Error))return r;
-        faces??=character.Meshes.Select(BindTriangle.Measure).ToArray();
+        faces??=geometry?.Faces??character.Meshes.Select(BindTriangle.Measure).ToArray();
         var specifications=Deformation.Poses.ToArray();
         var tests=new StressResult[specifications.Length];
         Vector3[][] Buffers()=>character.Meshes.Select(m=>new Vector3[m.Vertices.Length]).ToArray();
@@ -103,7 +108,7 @@ public static class RigValidator
         }
         return r;
     }
-    static StressResult MeasurePose(ImportedCharacter character,GeneratedRig rig,StressPose pose,BindTriangle[][] faces,Vector3[][] deformed,float height)
+    internal static StressResult MeasurePose(ImportedCharacter character,GeneratedRig rig,StressPose pose,BindTriangle[][] faces,Vector3[][] deformed,float height)
     {
         var transforms=Deformation.BoneTransforms(rig,Deformation.JointRotations(rig,pose));
         var rotations=transforms.Rotations;

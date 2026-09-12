@@ -12,7 +12,7 @@ internal static class LegFitting
         var volume=new SurfaceVisibility(character.Meshes.Where(m=>m.Kind==MeshKind.Body));
         PreserveSymmetricHipHeight(character,anatomy,h,volume);
         var sections=new List<MeshSections.Section>();
-        for(int i=0;i<=98;i++)
+        for(int i=0;i<=126;i++)
         {
             float y=bottom+h*(.02537f+i*.005f);
             sections.AddRange(MeshSections.Cut(character,new(center,y,0),Vector3.UnitY,h*.45f,h*.00001f));
@@ -63,6 +63,7 @@ internal static class LegFitting
             }
         }
         HipFitting.Refine(anatomy,sections,h,volume);
+        HipFitting.RaiseLowHips(anatomy,sections,h,volume);
     }
     static void PreserveSymmetricHipHeight(ImportedCharacter character,Anatomy anatomy,float h,SurfaceVisibility volume)
     {

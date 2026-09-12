@@ -14,9 +14,9 @@ internal static class BodyProportions
         var meshes=source.ToArray();var sections=new List<Section>();
         // Intersect triangle edges rather than sampling vertices: dense faces,
         // sparse neck rings and material seams should give the same cross-section.
-        for(int sample=0;sample<=100;sample++)
+        for(int sample=0;sample<=128;sample++)
         {
-            float y=bottom+height*(.6f+sample*.0035f);
+            float y=bottom+height*(.5f+sample*.0035f);
             float minX=float.PositiveInfinity,maxX=float.NegativeInfinity,minZ=float.PositiveInfinity,maxZ=float.NegativeInfinity;
             int count=0;
             foreach(var mesh in meshes)for(int t=0;t<mesh.Triangles.Length;t+=3)for(int edge=0;edge<3;edge++)
@@ -38,9 +38,17 @@ internal static class BodyProportions
         while(last+1<sections.Count&&SameNeck(sections[last],sections[last+1]))last++;
         if(last-first<2)return height;
         float neckY=(sections[first].Y+sections[last].Y)*.5f;
+        // An unusually narrow waist is not the neck if another bottleneck
+        // separates the shoulders and skull farther up the same silhouette.
+        foreach(var later in sections.Where(s=>s.Y>neckY+height*.1f&&s.Y<bottom+height*.9f))
+        {
+            bool Expanded(Section s)=>s.Width>later.Width*1.35f&&s.Depth>later.Depth*1.1f;
+            if(sections.Any(s=>s.Y<later.Y-height*.02f&&s.Y>later.Y-height*.07f&&Expanded(s))&&
+                sections.Any(s=>s.Y>later.Y+height*.02f&&s.Y<later.Y+height*.07f&&Expanded(s)))return height;
+        }
         // Require expansion in both transverse dimensions above the neck. An arm
         // silhouette or a narrow waist alone is not sufficient evidence of a head.
-        if(!sections.Any(s=>s.Y>neckY+height*.025f&&s.Width>narrowest.Width*2.2f&&s.Depth>narrowest.Depth*1.5f))return height;
+        if(!sections.Any(s=>s.Y>Math.Max(neckY+height*.025f,bottom+height*.82f)&&s.Width>narrowest.Width*2.2f&&s.Depth>narrowest.Depth*1.5f))return height;
         return Math.Min(height,(neckY-bottom)/.85f);
     }
 }

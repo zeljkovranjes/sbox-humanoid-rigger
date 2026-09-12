@@ -75,7 +75,7 @@ public sealed class Wizard
             case WizardStep.LeftHand:DetectHand("R");Step=WizardStep.RightHand;break;
             case WizardStep.RightHand:
                 Step=WizardStep.Generating;
-                try{Rig=SkeletonSolver.Fit(Character,Anatomy,Profile);Step=Rig.Report.Passed ? WizardStep.Finish : WizardStep.Validation;}
+                try{Rig=SkeletonSolver.Fit(Character,Anatomy,Profile);Anatomy=Rig.Anatomy??Anatomy;Step=Rig.Report.Passed ? WizardStep.Finish : WizardStep.Validation;}
                 catch{Step=WizardStep.RightHand;throw;}
                 break;
             default:throw new InvalidOperationException("Cannot continue from this step.");
@@ -84,8 +84,14 @@ public sealed class Wizard
     }
     void DetectHand(string side)
     {
+        foreach(var role in Anatomy!.GeometricHandPoints.Keys.Where(r=>r.EndsWith("."+side)).ToArray())Anatomy.GeometricHandPoints.Remove(role);
         HandDetector.Detect(Character!,Anatomy!,side,expectedCount:side=="L"?LeftFingerCount:RightFingerCount);
-        if(HandRefiner is not null)Anatomy!.HandRefinements[side]=HandRefiner.Refine(Character!,Anatomy,side);
+        if(HandRefiner is null)return;
+        var geometry=Anatomy.Points.Values.Where(p=>p.Role.EndsWith("."+side)&&Profiles.Fingers.Any(f=>p.Role.StartsWith(f))).ToArray();
+        Anatomy.HandRefinements[side]=HandRefiner.Refine(Character!,Anatomy,side);
+        foreach(var point in geometry)
+            if(!point.Corrected&&Anatomy.Points.TryGetValue(point.Role,out var refined)&&!refined.Corrected&&refined.Position!=point.Position)
+                Anatomy.GeometricHandPoints[point.Role]=point;
     }
     public void Back()
     {

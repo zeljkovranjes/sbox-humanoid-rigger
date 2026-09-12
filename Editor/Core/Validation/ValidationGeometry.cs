@@ -1,0 +1,36 @@
+namespace HumanoidRigger;
+using Vector3=System.Numerics.Vector3;
+
+/// <summary>Immutable mesh evidence shared only within one rig-generation call.
+/// Weights, bone frames and every stress pose are still checked for each trial.</summary>
+internal sealed class ValidationGeometry
+{
+    readonly Lazy<Vector3[]> body;
+    readonly Lazy<BindTriangle[][]> faces;
+    readonly Lazy<List<int>[][]> neighbors,touching;
+    readonly Dictionary<Vector3,float> jointDistances=[];
+    internal float Height {get;}
+    internal Vector3[] Body=>body.Value;
+    internal BindTriangle[][] Faces=>faces.Value;
+    internal List<int>[][] Neighbors=>neighbors.Value;
+    internal List<int>[][] Touching=>touching.Value;
+    internal ValidationGeometry(ImportedCharacter character)
+    {
+        Height=character.AnatomicalHeight;
+        body=new(()=>character.Meshes.Where(m=>m.Kind==MeshKind.Body).SelectMany(m=>m.Vertices).ToArray());
+        faces=new(()=>character.Meshes.Select(BindTriangle.Measure).ToArray());
+        neighbors=new(()=>character.Meshes.Select(m=>Geometry.Neighbors(m)).ToArray());
+        touching=new(()=>
+        {
+            var result=character.Meshes.Select(m=>m.Vertices.Select(_=>new List<int>()).ToArray()).ToArray();
+            for(int p=0;p<Faces.Length;p++)for(int t=0;t<Faces[p].Length;t++)
+            {var f=Faces[p][t];result[p][f.A].Add(t);result[p][f.B].Add(t);result[p][f.C].Add(t);}
+            return result;
+        });
+    }
+    internal float JointDistanceSquared(Vector3 point)
+    {
+        if(!jointDistances.TryGetValue(point,out float distance))jointDistances[point]=distance=Body.Min(p=>Vector3.DistanceSquared(p,point));
+        return distance;
+    }
+}

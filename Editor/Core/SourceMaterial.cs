@@ -7,6 +7,13 @@ namespace HumanoidRigger;
 		public string ColorTexture { get; set; }
 		public System.Numerics.Vector3? ColorFactor { get; set; }
 		public bool VertexColors { get; set; }
+		public bool AuthoredPbr { get; set; }
+		public bool Unlit { get; set; }
+		public string MetallicRoughnessTexture { get; set; }
+		public float MetallicFactor { get; set; } = 1;
+		public float RoughnessFactor { get; set; } = 1;
+		public float OpacityFactor { get; set; } = 1;
+		public System.Numerics.Vector3 EmissiveFactor { get; set; } = System.Numerics.Vector3.One;
 		public string NormalTexture { get; set; }
 		public string RoughnessTexture { get; set; }
 		public string MetalnessTexture { get; set; }

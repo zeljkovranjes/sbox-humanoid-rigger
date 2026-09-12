@@ -6,6 +6,39 @@ using Vector3=System.Numerics.Vector3;
 /// the pelvis. Ambiguous branches and large changes retain the original prior.</summary>
 internal static class HipFitting
 {
+    public static void RaiseLowHips(Anatomy anatomy,IReadOnlyList<MeshSections.Section> sections,float height,SurfaceVisibility volume)
+    {
+        var old=new[]{anatomy.Points["UpperLeg.L"],anatomy.Points["UpperLeg.R"]};
+        if(old.Any(p=>p.Corrected))return;
+        var candidates=new Vector3[2];float center=anatomy.SymmetryPlaneX;
+        for(int i=0;i<2;i++)
+        {
+            float sign=i==0?1:-1;var hip=old[i].Position;
+            var leg=sections.Where(s=>(s.Center.X-center)*sign>height*.02f&&Math.Abs(s.Center.X-hip.X)<height*.06f&&
+                s.Center.Y>hip.Y-height*.07f&&s.Center.Y<hip.Y+height*.15f&&s.Radius<height*.095f).ToArray();
+            var top=leg.MaxBy(s=>s.Center.Y);
+            if(top is null||top.Center.Y<hip.Y+height*.015f||top.MinimumRadius<height*.012f)return;
+            // Two separate thigh contours must actually join a central pelvis.
+            if(!sections.Any(s=>Math.Abs(s.Center.X-center)<height*.015f&&s.Center.Y>top.Center.Y&&s.Center.Y<top.Center.Y+height*.02f&&s.Area>top.Area*1.5f))return;
+            // A torso contour already overlapping the thigh is a separate shell,
+            // not evidence of a groin transition. Keep its anatomical prior.
+            if(sections.Any(s=>Math.Abs(s.Center.X-center)<height*.015f&&s.Center.Y<top.Center.Y&&s.Center.Y>top.Center.Y-height*.03f&&s.Area>top.Area*1.5f))return;
+            var shaft=leg.Where(s=>s.Center.Y<top.Center.Y-height*.015f&&s.Center.Y>top.Center.Y-height*.06f).ToArray();if(shaft.Length<4)return;
+            // A narrowing end cap belongs to a detached leg segment. Extending
+            // its radius would place the socket beyond its authored articulation.
+            if(top.MinimumRadius<shaft.Average(s=>s.MinimumRadius)*.85f)return;
+            var mean=Geometry.Mean(shaft.Select(s=>s.Center));float variance=shaft.Sum(s=>(s.Center.Y-mean.Y)*(s.Center.Y-mean.Y));if(variance<height*height*1e-8f)return;
+            var slope=shaft.Aggregate(Vector3.Zero,(sum,s)=>sum+(s.Center-mean)*(s.Center.Y-mean.Y))/variance;
+            var candidate=mean+slope*(top.Center.Y+top.MinimumRadius-mean.Y);
+            if(Vector3.Distance(candidate,hip)>height*.14f||!volume.Contains(candidate,height*.00001f))return;
+            candidates[i]=candidate;
+        }
+        if(Math.Abs(candidates[0].Y-candidates[1].Y)>Math.Abs(old[0].Position.Y-old[1].Position.Y)+height*.01f)return;
+        var pelvis=anatomy.Points["Pelvis"];float lift=(candidates[0].Y+candidates[1].Y-old[0].Position.Y-old[1].Position.Y)*.5f;
+        var moved=pelvis.Position+Vector3.UnitY*lift;
+        if(!pelvis.Corrected&&volume.Contains(moved,height*.00001f))anatomy.Points["Pelvis"]=pelvis with{Position=moved};
+        for(int i=0;i<2;i++)anatomy.Points[old[i].Role]=old[i] with{Position=candidates[i]};
+    }
     public static void Refine(Anatomy anatomy,IReadOnlyList<MeshSections.Section> sections,float height,SurfaceVisibility volume)
     {
         float center=anatomy.SymmetryPlaneX;

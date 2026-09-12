@@ -27,7 +27,7 @@ internal static partial class MaterialAssets
         var key=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(character.SourcePath+"\n"+character.Name))).ToLowerInvariant()[..24];
         var directory=Path.Combine(Project.Current.GetAssetsPath(),"humanoid_rigger",".preview",key);
         Directory.CreateDirectory(directory);
-        var materials=await Task.Run(()=>TextureFiles.Copy(character,directory,true));await new EditorThread();
+        var materials=await Task.Run(()=>PrepareFormats(TextureFiles.Copy(character,directory,true),directory,ExportFormats.Vmdl));await new EditorThread();
         return await Compile(materials,directory,character);
     }
 }

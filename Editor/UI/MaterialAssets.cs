@@ -33,7 +33,7 @@ internal static partial class MaterialAssets
 			var tokenCounts = new Dictionary<string, int>( StringComparer.Ordinal );
 			foreach ( var candidate in textures )
 			{
-				foreach ( var token in NameTokens( Path.GetFileNameWithoutExtension( candidate ) ) )
+				foreach ( var token in TextureNames.Tokens( Path.GetFileNameWithoutExtension( candidate ) ) )
 					tokenCounts[token] = tokenCounts.GetValueOrDefault( token ) + 1;
 			}
 			var ubiquitous = tokenCounts
@@ -120,12 +120,18 @@ internal static partial class MaterialAssets
 				var opacity = FindAuthoredTexture( authored?.OpacityTexture, textures )
 					?? BestTextureMatch( material, textures, new[]
 					{ "_a", "_alpha", "_opacity", "_trans", "_transparency" } );
+				if(authored?.AuthoredPbr==true)
+				{
+					color=FindAuthoredTexture(authored.ColorTexture,textures);normal=FindAuthoredTexture(authored.NormalTexture,textures);
+					rough=FindAuthoredTexture(authored.RoughnessTexture,textures);metal=FindAuthoredTexture(authored.MetalnessTexture,textures);
+					occlusion=FindAuthoredTexture(authored.OcclusionTexture,textures);emissive=FindAuthoredTexture(authored.EmissiveTexture,textures);opacity=FindAuthoredTexture(authored.OpacityTexture,textures);
+				}
 
 				// Card/strand geometry (lashes, hair, brows, anything the modeler named
 				// "masked") is authored for alpha testing - rendered opaque it shows as
 				// solid white sheets (user report: "the makeup around the eye is white").
-				var materialTokens = NameTokens( material );
-				var alphaTest = authored?.AlphaTest == true || (authored?.Translucent != true
+				var materialTokens = TextureNames.Tokens( material );
+				var alphaTest = authored?.AlphaTest == true || (authored?.AuthoredPbr!=true && authored?.Translucent != true
 					&& materialTokens.Any( token =>
 						token is "mask" or "masked" or "lash" or "lashes" or "eyelash" or "eyelashes"
 							or "hair" or "hairs" or "brow" or "brows" or "eyebrow" or "eyebrows"
@@ -158,7 +164,7 @@ internal static partial class MaterialAssets
 				builder.AppendLine( "// Regenerated on conversion while this header stays - DELETE THE LINE ABOVE to make manual edits permanent." );
 				builder.AppendLine( "Layer0" );
 				builder.AppendLine( "{" );
-				builder.AppendLine( authored?.VertexColors == true && color is null
+				builder.AppendLine( authored?.Unlit == true ? "\tshader \"shaders/unlit.shader\"" : authored?.VertexColors == true && color is null
 					? "\tshader \"shaders/vertex_color.shader\""
 					: "\tshader \"shaders/complex.shader\"" );
 				if ( alphaTest )
@@ -168,10 +174,12 @@ internal static partial class MaterialAssets
 				}
 				if ( translucent )
 					builder.AppendLine( "\tF_TRANSLUCENT 1" );
+				if(authored?.OpacityFactor is {} opacityFactor && opacityFactor!=1)
+					builder.AppendLine(FormattableString.Invariant($"\tg_flOpacityScale \"{opacityFactor:R}\""));
 				if ( authored?.DoubleSided == true )
 					builder.AppendLine( "\tF_RENDER_BACKFACES 1" );
 				builder.AppendLine( $"\tTextureColor \"{(color ?? "materials/default/default_color.tga")}\"" );
-				if ( color is null && authored?.ColorFactor is { } tint )
+				if ( (color is null || authored?.AuthoredPbr==true) && authored?.ColorFactor is { } tint )
 					builder.AppendLine( FormattableString.Invariant(
 						$"\tg_vColorTint \"[{tint.X:R} {tint.Y:R} {tint.Z:R} 1]\"" ) );
 				if ( opacity is not null )
@@ -189,6 +197,13 @@ internal static partial class MaterialAssets
 				{
 					builder.AppendLine( "\tF_SELF_ILLUM 1" );
 					builder.AppendLine( $"\tTextureSelfIllumMask \"{emissive}\"" );
+					if(authored?.AuthoredPbr==true)
+					{
+						var emission=authored.EmissiveFactor;
+						builder.AppendLine("\tg_flSelfIllumAlbedoFactor 0");
+						builder.AppendLine("\tg_flSelfIllumBrightness 1");
+						builder.AppendLine(FormattableString.Invariant($"\tg_vSelfIllumTint \"[{emission.X:R} {emission.Y:R} {emission.Z:R} 1]\""));
+					}
 				}
 				builder.AppendLine( "}" );
 				File.WriteAllText( vmatPath, builder.ToString() );
@@ -300,21 +315,13 @@ internal static partial class MaterialAssets
 
 			string SingleColorTexture( List<string> candidates )
 			{
-				var plausible = candidates.Where( candidate =>
-				{
-					var tokens = NameTokens( Path.GetFileNameWithoutExtension( candidate ) );
-					return !tokens.Any( token => token is "n" or "nrm" or "normal" or "bump"
-						or "rough" or "roughness" or "gloss" or "metal" or "metallic"
-						or "metalness" or "ao" or "occlusion" );
-				} ).ToList();
-				return plausible.Count == 1
-					? Path.GetRelativePath( assetsPath, plausible[0] ).Replace( '\\', '/' )
-					: null;
+				var match=TextureNames.SingleColor(candidates);
+                return match is null ? null : Path.GetRelativePath(assetsPath,match).Replace('\\','/');
 			}
 
 			string BestTextureMatch( string material, List<string> candidates, string[] suffixes )
 			{
-				var materialTokens = NameTokens( material );
+				var materialTokens = TextureNames.Tokens( material );
 				var scored = new List<(string Path, int Score)>();
 				foreach ( var candidate in candidates )
 				{
@@ -329,7 +336,7 @@ internal static partial class MaterialAssets
 					if ( !suffixes.Any( s => stem.EndsWith( s, StringComparison.OrdinalIgnoreCase )
 						|| stemNoDigits.EndsWith( s, StringComparison.OrdinalIgnoreCase ) ) )
 						continue;
-					var shared = NameTokens( stem ).Where( materialTokens.Contains ).ToList();
+					var shared = TextureNames.Tokens( stem ).Where( materialTokens.Contains ).ToList();
 					var distinctive = shared.Count( t => !ubiquitous.Contains( t ) );
 					scored.Add( (candidate, distinctive * 10 + shared.Count) );
 				}
@@ -410,36 +417,5 @@ internal static partial class MaterialAssets
 		}
 	}
 
-	/// <summary>Lower-case name tokens split on separators and camelCase boundaries,
-	/// with generic prefixes (mi_/m_/t_/tex_) dropped.</summary>
-	static HashSet<string> NameTokens( string name )
-	{
-		var tokens = new HashSet<string>( StringComparer.Ordinal );
-		var current = new System.Text.StringBuilder();
-		void Commit()
-		{
-			if ( current.Length > 0 )
-			{
-				var token = current.ToString().ToLowerInvariant();
-				if ( token is not ("mi" or "m" or "t" or "tex") )
-					tokens.Add( token );
-				current.Clear();
-			}
-		}
-		for ( var i = 0; i < name.Length; i++ )
-		{
-			var c = name[i];
-			if ( !char.IsLetterOrDigit( c ) )
-			{
-				Commit();
-				continue;
-			}
-			if ( char.IsUpper( c ) && current.Length > 0 && char.IsLower( name[i - 1] ) )
-				Commit();
-			current.Append( c );
-		}
-		Commit();
-		return tokens;
-	}
 
 }

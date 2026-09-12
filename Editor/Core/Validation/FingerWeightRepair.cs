@@ -5,6 +5,9 @@ namespace HumanoidRigger;
 public static class FingerWeightRepair
 {
     public static ValidationReport Improve(ImportedCharacter character,GeneratedRig rig,ValidationReport initial)
+        =>Improve(character,rig,initial,()=>HeatSkinning.Solve(character,rig));
+
+    internal static ValidationReport Improve(ImportedCharacter character,GeneratedRig rig,ValidationReport initial,Func<Influence[][][]> heatCandidate)
     {
         if(rig.Anatomy is null)return initial;
         var roles=rig.Bones.Select(b=>b.Role).ToHashSet();
@@ -16,7 +19,7 @@ public static class FingerWeightRepair
             (p.Degrees!=0&&Finger(p.Role,side)||p.AdditionalJoints?.Any(j=>j.Degrees!=0&&Finger(j.Role,side))==true))).ToArray();
         if(sides.Length==0)return initial;
         Influence[][][] candidate;
-        try{candidate=HeatSkinning.Solve(character,rig);}
+        try{candidate=heatCandidate();}
         catch(InvalidOperationException){return initial;}
         var result=initial;
         if(!initial.Passed)

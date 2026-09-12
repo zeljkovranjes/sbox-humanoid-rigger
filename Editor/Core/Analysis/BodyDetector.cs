@@ -11,7 +11,12 @@ public sealed class Anatomy
     // Hand-region seeds and wrist articulations have different jobs. Keeping
     // them separate avoids shifting finger segmentation when the wrist is fitted.
     public Dictionary<string,Vector3> PalmCenters {get;}=new();
+    Dictionary<string,Vector3>? handEnds;
+    public Dictionary<string,Vector3> HandEnds=>handEnds??=new();
     public Dictionary<string,HandRefinementReport> HandRefinements {get;}=new();
+    Dictionary<string,Landmark>? geometricHandPoints;
+    // Retain only automatic changes for the final deformation comparison.
+    public Dictionary<string,Landmark> GeometricHandPoints=>geometricHandPoints??=new();
     public CharacterPose Pose {get;set;}
     public bool UnrecommendedImportPose {get;set;}
     public float SymmetryPlaneX {get;set;}
@@ -29,7 +34,9 @@ public sealed class Anatomy
         foreach(var pair in Hands)copy.Hands.Add(pair.Key,pair.Value);
         if(FootEnds is not null)foreach(var pair in FootEnds)copy.FootEnds.Add(pair.Key,pair.Value);
         foreach(var pair in PalmCenters)copy.PalmCenters.Add(pair.Key,pair.Value);
+        if(HandEnds is not null)foreach(var pair in HandEnds)copy.HandEnds.Add(pair.Key,pair.Value);
         foreach(var pair in HandRefinements)copy.HandRefinements.Add(pair.Key,pair.Value);
+        foreach(var pair in GeometricHandPoints)copy.GeometricHandPoints.Add(pair.Key,pair.Value);
         copy.Warnings.AddRange(Warnings);return copy;
     }
     public void Set(string role,Vector3 p,float confidence)=>Points[role]=new(role,p,Math.Clamp(confidence,0,1));
@@ -39,10 +46,12 @@ public sealed class Anatomy
         if(!Points.ContainsKey(role)) throw new ArgumentException("Unknown landmark.");
         var previous=Points[role].Position;
         Points[role]=new(role,p,1,true);
+        GeometricHandPoints.Remove(role);
         if(role is "Pelvis" or "Chest") RecomputeSpine();
         foreach(string side in new[]{"L","R"})
         {
             if(role=="Hand."+side&&PalmCenters.TryGetValue(side,out var palm))PalmCenters[side]=palm+(p-previous);
+            if(role=="Hand."+side&&HandEnds.TryGetValue(side,out var end))HandEnds[side]=end+(p-previous);
             if(role!="Hand."+side&&role!="LowerArm."+side||!Hands.TryGetValue(side,out var frame))continue;
             var forward=this["Hand."+side]-this["LowerArm."+side];
             if(forward.LengthSquared()<1e-8f){Hands.Remove(side);continue;}
@@ -73,6 +82,7 @@ public static class BodyDetector
         var center=centerline??HumanoidCenterline.Estimate(body,min.Y,h);
         if(!float.IsFinite(center))throw new ArgumentException("Invalid centerline position.");
         var a=new Anatomy{Height=h,SymmetryPlaneX=center};
+        a.Warnings.AddRange(character.ImportWarnings??[]);
         h=BodyProportions.EstimateBodyHeight(character.Meshes.Where(m=>m.Kind==MeshKind.Body),min.Y,h);
         Vector3 Center(float y,float x,float width)
         {
@@ -87,17 +97,25 @@ public static class BodyDetector
         foreach(var (side,sign) in new[]{("L",1f),("R",-1f)})
         {
             string R(string role)=>role+"."+side;
-            var sideBody=body.Where(p=>(p.X-center)*sign>h*.14f && p.Y>min.Y+h*.32f && p.Y<min.Y+h*.86f).ToArray();
+            var upper=body.Where(p=>p.Y>min.Y+h*.4f&&p.Y<min.Y+h*.86f).ToArray();
+            float sideWidth=Quantile(upper.Select(p=>(p.X-center)*sign),.99f);
+            float sideThreshold=Math.Min(h*.14f,sideWidth*.65f);
+            var sideBody=body.Where(p=>(p.X-center)*sign>sideThreshold && p.Y>min.Y+h*.32f && p.Y<min.Y+h*.86f).ToArray();
             if(sideBody.Length<8) throw new InvalidOperationException("The mesh does not expose two separable arms. Correct its orientation or use an open rest pose.");
             var furthest=Quantile(sideBody.Select(p=>(p.X-center)*sign),.97f);
             var hand=Geometry.Mean(sideBody.Where(p=>(p.X-center)*sign>furthest-h*.035f));
-            var shoulder=Center(.80f,center+sign*h*.105f,.055f);
+            var shoulder=Center(.80f,center+sign*Math.Min(h*.105f,furthest*.6f),.055f);
             var downward=MathF.Atan2(shoulder.Y-hand.Y,Math.Abs(hand.X-shoulder.X))*180/MathF.PI;
             if(downward>50)
             {
                 // An arm beside the torso ends below its widest silhouette point.
-                hand=Geometry.Mean(sideBody.OrderBy(p=>p.Y).Take(Math.Max(8,sideBody.Length/30)));
-                shoulder=Center(.80f,center+sign*h*.15f,.045f);
+                // Broad thighs can also enter sideBody. Keep the distal search
+                // in the arm's lateral envelope before fitting the wrist section.
+                float band=sideThreshold<h*.14f?Math.Min(h*.08f,furthest*.28f):h*.08f;
+                var outerArm=sideBody.Where(p=>(p.X-center)*sign>furthest-band).ToArray();
+                if(outerArm.Length<8)outerArm=sideBody;
+                hand=Geometry.Mean(outerArm.OrderBy(p=>p.Y).Take(Math.Max(8,outerArm.Length/30)));
+                shoulder=Center(.80f,center+sign*Math.Min(h*.15f,furthest*.75f),.045f);
                 downward=MathF.Atan2(shoulder.Y-hand.Y,Math.Abs(hand.X-shoulder.X))*180/MathF.PI;
             }
             if(side=="L") a.Pose=downward<15 ? CharacterPose.TPose : downward<38 ? CharacterPose.APose1 : downward<58 ? CharacterPose.APose2 : CharacterPose.Relaxed;
@@ -140,12 +158,23 @@ public static class BodyDetector
         a.RecomputeSpine();
         if(h<a.Height*.999f)
         {
+            var head=a.Points["Head"];
+            if(Math.Abs(head.Position.Z-a["Neck"].Z)>h*.1f)
+                a.Set("Head",new Vector3(center,head.Position.Y,a["Neck"].Z),head.Confidence);
             // A large skull needs an envelope spanning its measured volume. A
             // terminal point at the head joint makes its crown look like a remote
             // region and lets the neck retain otherwise unrelated head weights.
             var end=a["Head"];end.Y=max.Y-(max.Y-end.Y)*.1f;
             end=a.Volume.Refine(end,a.Height*.025f);
             if(a.Volume.Contains(end)&&end.Y>a["Head"].Y)a.HeadEnd=end;
+            else foreach(float fraction in new[]{.2f,.3f,.4f})
+            {
+                var seed=new Vector3(center,max.Y-(max.Y-a["Head"].Y)*fraction,a["Neck"].Z);
+                var section=MeshSections.Cut(character,seed,Vector3.UnitY,a.Height*.5f,a.Height*1e-5f)
+                    .Where(s=>s.Area>a.Height*a.Height*.002f&&Math.Abs(s.Center.X-center)<a.Height*.1f&&Math.Abs(s.Center.Z-seed.Z)<a.Height*.15f)
+                    .OrderByDescending(s=>s.Area).FirstOrDefault();
+                if(section is not null){a.HeadEnd=section.Center;break;}
+            }
         }
         a.UnrecommendedImportPose=!ImportPose.IsRecommended(a);
         if(a.Volume.InteriorCells==0)a.Warnings.Add("The body has no enclosed volume; landmark confidence is reduced.");

@@ -6,5 +6,8 @@
   "Schema": 1,
   "IncludeSourceFiles": true,
   "PackageReferences": [],
-  "Metadata": { "Summary": "Humanoid rigging editor with automatic landmarks and validation." }
+  "Metadata": {
+    "Summary": "Humanoid rigging editor with automatic landmarks and validation.",
+    "Compiler": { "ReleaseMode": "Release" }
+  }
 }

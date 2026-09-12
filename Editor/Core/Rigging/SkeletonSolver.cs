@@ -19,6 +19,7 @@ public static class RigGeometry
     {
         if(anatomy is null)return null;
         if(role=="Head")return anatomy.HeadEnd;
+        if(role.StartsWith("Hand.")&&anatomy.HandEnds?.TryGetValue(role[^1..],out var palm)==true)return palm;
         if(role.StartsWith("Toe.")&&anatomy.FootEnds?.TryGetValue(role[^1..],out var foot)==true)return foot;
         if(!role.EndsWith(".L")&&!role.EndsWith(".R"))return null;
         foreach(string finger in Profiles.Fingers)foreach(int joint in Enumerable.Range(1,3))
@@ -42,6 +43,39 @@ public static class RigGeometry
 public static class SkeletonSolver
 {
     public static GeneratedRig Fit(ImportedCharacter character,Anatomy anatomy,RigProfile profile)
+    {
+        var changes=anatomy.GeometricHandPoints.Where(p=>anatomy.Points.TryGetValue(p.Key,out var current)&&!current.Corrected&&current.Position!=p.Value.Position).ToArray();
+        if(changes.Length==0)return FitGeometry(character,anatomy,profile);
+        var geometry=anatomy.Copy();
+        foreach(var point in changes)geometry.Points[point.Key]=point.Value;
+        geometry.GeometricHandPoints.Clear();
+        var baseline=FitGeometry(character,geometry,profile);
+        // Reuse validated geometry weights before considering a second full solve.
+        // A small visual prior must not disturb unrelated body weight candidates.
+        var proposal=CreateSkeleton(anatomy,profile);
+        proposal.Weights=baseline.Weights.Select(p=>p.Select(w=>w.ToArray()).ToArray()).ToArray();
+        proposal.Report=RigValidator.ValidateAndRepair(character,proposal);
+        if(AcceptHandPrior(proposal,baseline))return proposal;
+        if(!baseline.Report.Passed)
+        {
+            proposal=FitGeometry(character,anatomy,profile);
+            if(AcceptHandPrior(proposal,baseline))return proposal;
+        }
+        foreach(string side in changes.Select(p=>p.Key[^1..]).Distinct())
+            if(baseline.Anatomy!.HandRefinements.TryGetValue(side,out var report))
+                baseline.Anatomy.HandRefinements[side]=report with{Status="Geometry retained after deformation validation",AdjustedJoints=0};
+        return baseline;
+    }
+    static bool AcceptHandPrior(GeneratedRig candidate,GeneratedRig baseline)
+    {
+        var roles=candidate.Bones.Select(b=>b.Role).ToHashSet();
+        var expected=Deformation.Poses.Where(p=>Deformation.IsApplicable(p,roles)).Select(p=>p.Name).Order().ToArray();
+        if(!candidate.Report.Passed||!WeightRepair.HasCompleteEvidence(candidate.Report,expected)||candidate.Report.StressTests.Any(t=>t.MaximumStretch>4||t.MinimumAreaRatio<.025f))return false;
+        if(!baseline.Report.Passed)return true;
+        if(!WeightRepair.HasCompleteEvidence(baseline.Report,expected))return false;
+        return candidate.Report.StressTests.Zip(baseline.Report.StressTests).All(p=>p.First.Pose==p.Second.Pose&&p.First.ReversedTriangles<=p.Second.ReversedTriangles&&p.First.ReversedAreaFraction<=p.Second.ReversedAreaFraction+1e-7f);
+    }
+    static GeneratedRig CreateSkeleton(Anatomy anatomy,RigProfile profile)
     {
         profile.Validate();var bones=new List<RigBone>();var ids=new Dictionary<string,int>();
         foreach(var definition in profile.Bones)
@@ -71,46 +105,79 @@ public static class SkeletonSolver
             var rotation=Frame(aim,definition.AimAxis,definition.Roll,handFrame?.Normal);
             ids.Add(definition.Role,bones.Count);bones.Add(new(definition.Role,definition.Name,parent,p.Position,rotation,definition.Deform));
         }
-        var rig=new GeneratedRig{Profile=profile,Bones=bones.ToArray(),Anatomy=anatomy};
-        rig.Weights=Skinning.Solve(character,rig);
-        rig.Report=RigValidator.ValidateAndRepair(character,rig);
-        rig.Report=FingerWeightRepair.Improve(character,rig,rig.Report);
-        var repaired=rig.Weights;
-        TrySkinningCandidates(character,rig);
-        if(rig.Weights!=repaired)rig.Report=FingerWeightRepair.Improve(character,rig,rig.Report);
-        return rig;
+        return new GeneratedRig{Profile=profile,Bones=bones.ToArray(),Anatomy=anatomy};
     }
-    static void TrySkinningCandidates(ImportedCharacter character,GeneratedRig rig)
+    static GeneratedRig FitGeometry(ImportedCharacter character,Anatomy anatomy,RigProfile profile)
     {
-        if(rig.Report.Passed||rig.Report.Issues.Any(i=>i.Error&&i.Code is not ("deformation" or "weight-region")))return;
-        var original=rig.Weights;bool accepted=false;
+        var rig=CreateSkeleton(anatomy,profile);
+        // Heat depends on geometry and the fitted skeleton, not trial weights.
+        // Keep its immutable candidates within this fit so body and finger repair
+        // share one solve; validation receives writable copies below.
+        var heat=new Lazy<Influence[][][][]>(()=>HeatSkinning.Candidates(character,rig).ToArray());
+        var skinning=new Skinning.SolveCache(character);
+        var validation=new ValidationGeometry(character);
+        rig.Weights=Skinning.Solve(character,rig,skinning);
+        rig.Report=RigValidator.ValidateAndRepair(character,rig,validation);
+        rig.Report=FingerWeightRepair.Improve(character,rig,rig.Report,()=>heat.Value[0]);
+        var repaired=rig.Weights;
+        var failed=TrySkinningCandidates(character,rig,skinning,()=>heat.Value,validation);
+        if(rig.Weights!=repaired)rig.Report=FingerWeightRepair.Improve(character,rig,rig.Report,()=>heat.Value[0]);
+        var refined=JointWeightRepair.Improve(character,rig.Report.Passed?rig:failed??rig,validation);
+        return refined.Report.Passed?refined:rig;
+    }
+    static GeneratedRig? TrySkinningCandidates(ImportedCharacter character,GeneratedRig rig,Skinning.SolveCache skinning,Func<Influence[][][][]> heatCandidates,ValidationGeometry validation)
+    {
+        if((rig.Report.Passed&&rig.Report.StressTests.All(t=>t.ReversedTriangles==0))||rig.Report.Issues.Any(i=>i.Error&&i.Code is not ("deformation" or "weight-region")))return null;
+        var bestWeights=rig.Weights;var bestReport=rig.Report;bool initiallyPassed=bestReport.Passed;
+        var roles=rig.Bones.Select(b=>b.Role).ToHashSet();var expectedPoses=Deformation.Poses.Where(p=>Deformation.IsApplicable(p,roles)).Select(p=>p.Name).Order().ToArray();
+        GeneratedRig? failed=null;double failureScore=double.PositiveInfinity;
         try
         {
-            foreach(var (locality,regions) in new[]{(true,false),(false,true),(true,true)})
+            foreach(var weights in Candidates())
             {
-                rig.Weights=Skinning.Solve(character,rig,useLocalityPrior:locality,useRegionSeeds:regions);
-                var candidate=RigValidator.ValidateAndRepair(character,rig);
-                // Lower aggregate error alone is insufficient: a candidate that still
-                // tears or collapses must not replace the reviewed baseline result.
-                if(candidate.Passed){rig.Report=candidate;accepted=true;break;}
-            }
-            if(!accepted)
-            {
-                try
+                rig.Weights=weights;
+                var candidate=RigValidator.ValidateAndRepair(character,rig,validation);
+                if(!candidate.Passed&&WeightRepair.HasCompleteEvidence(candidate,expectedPoses))
                 {
-                    rig.Weights=HeatSkinning.Solve(character,rig);
-                    var candidate=RigValidator.ValidateAndRepair(character,rig);
-                    if(candidate.Passed){rig.Report=candidate;accepted=true;}
+                    double score=candidate.StressTests.Sum(t=>Math.Max(0,t.MaximumStretch/4-1)+Math.Max(0,1-t.MinimumAreaRatio/.025f));
+                    if(score<failureScore){failureScore=score;failed=new(){Profile=rig.Profile,Bones=rig.Bones.ToArray(),Anatomy=rig.Anatomy?.Copy(),Weights=rig.Weights,Report=candidate};}
                 }
-                catch(InvalidOperationException e)
-                {
-                    // A failed numerical alternative must not replace the original
-                    // validation result or leave partially generated weights active.
-                    rig.Report.Issues.Add(new("skinning-candidate",e.Message,false));
-                }
+                if(!BetterSkinning(candidate,bestReport,expectedPoses))continue;
+                candidate.RepairPasses++;
+                bestWeights=rig.Weights;bestReport=candidate;
+                if(candidate.StressTests.All(t=>t.ReversedTriangles==0))break;
             }
         }
-        finally{if(!accepted)rig.Weights=original;}
+        finally{rig.Weights=bestWeights;rig.Report=bestReport;}
+        return failed;
+        IEnumerable<Influence[][][]> Candidates()
+        {
+            // A technically valid rig can still fold. Try the existing volumetric
+            // candidate before more envelope variants when those folds persist.
+            if(initiallyPassed)foreach(var weights in Heat())yield return weights;
+            foreach(var (locality,regions) in new[]{(true,false),(false,true),(true,true)})
+                yield return Skinning.Solve(character,rig,skinning,useLocalityPrior:locality,useRegionSeeds:regions);
+            if(!initiallyPassed)foreach(var weights in Heat())yield return weights;
+        }
+        IEnumerable<Influence[][][]> Heat()
+        {
+            Influence[][][][] candidates;
+            try{candidates=heatCandidates();}
+            catch(InvalidOperationException e)
+            {
+                bestReport.Issues.Add(new("skinning-candidate",e.Message,false));candidates=[];
+            }
+            foreach(var weights in candidates)yield return weights.Select(p=>p.Select(v=>(Influence[])v.Clone()).ToArray()).ToArray();
+        }
+    }
+    internal static bool BetterSkinning(ValidationReport candidate,ValidationReport current,string[] expectedPoses)
+    {
+        if(!candidate.Passed||!WeightRepair.HasCompleteEvidence(candidate,expectedPoses)||candidate.StressTests.Any(t=>t.MaximumStretch>4||t.MinimumAreaRatio<.025f))return false;
+        if(!current.Passed)return true;
+        if(!WeightRepair.HasCompleteEvidence(current,expectedPoses))return false;
+        if(!candidate.StressTests.Select(t=>t.Pose).SequenceEqual(current.StressTests.Select(t=>t.Pose)))return false;
+        return candidate.StressTests.Zip(current.StressTests).All(p=>p.First.ReversedTriangles<=p.Second.ReversedTriangles&&p.First.ReversedAreaFraction<=p.Second.ReversedAreaFraction+1e-7f)&&
+            candidate.StressTests.Sum(t=>t.ReversedTriangles)<current.StressTests.Sum(t=>t.ReversedTriangles);
     }
     public static Quaternion Frame(Vector3 direction,string aimAxis,float roll,Vector3? planeNormal=null)
     {

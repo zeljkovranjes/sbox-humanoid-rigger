@@ -257,8 +257,22 @@ public sealed class RiggerWindow : Widget
             var started=System.Diagnostics.Stopwatch.GetTimestamp();
             if(preparation is not null&&!preparation.IsCompleted&&!Session.CanAccept(preparingDraft))
             {try{await preparation.ConfigureAwait(false);}catch{}await new EditorThread();}
-            if(preparation is null||!Session.CanAccept(preparingDraft)||preparation.IsFaulted)StartPreparation();
-            var result=await preparation.ConfigureAwait(false);await new EditorThread();
+            Wizard result;
+            if(Session.Step==WizardStep.RightHand)
+            {
+                // Give the busy state a frame to appear, then generate on the
+                // editor thread. Keep a draft so a failure preserves the edits.
+                await Task.Delay(16).ConfigureAwait(false);await new EditorThread();
+                if(!this.IsValid())return;
+                result=Session.CopyForContinuation();
+                LastAdvanceWorkerWasMainThread=ThreadSafe.IsMainThread;
+                result.Continue();
+            }
+            else
+            {
+                if(preparation is null||!Session.CanAccept(preparingDraft)||preparation.IsFaulted)StartPreparation();
+                result=await preparation.ConfigureAwait(false);await new EditorThread();
+            }
             Session.AcceptContinuation(result);
             LastAdvanceWorkMilliseconds=System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             started=System.Diagnostics.Stopwatch.GetTimestamp();if(this.IsValid())Build();

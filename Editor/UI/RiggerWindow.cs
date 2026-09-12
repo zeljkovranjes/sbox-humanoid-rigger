@@ -368,7 +368,9 @@ public sealed class RiggerWindow : Widget
     }
     void SchedulePreparation()
     {
-        if(!this.IsValid()||Session.Step is not (WizardStep.Body or WizardStep.LeftHand or WizardStep.RightHand)||queuedPreparationRevision==Session.Revision)return;
+        // Preparing hands is cheap; generating a full rig while its final hand
+        // is still being edited wastes both memory and a complete repair pass.
+        if(!this.IsValid()||Session.Step is not (WizardStep.Body or WizardStep.LeftHand)||queuedPreparationRevision==Session.Revision)return;
         queuedPreparationRevision=Session.Revision;_=PrepareWhenIdle(Session.Revision);
     }
     async Task PrepareWhenIdle(long revision)

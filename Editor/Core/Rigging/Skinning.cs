@@ -153,6 +153,29 @@ public static class Skinning
             .GroupBy(i=>i.Bone).Select(g=>new Influence(g.Key,g.Sum(i=>i.Weight))).OrderByDescending(i=>i.Weight).ToArray();
         return Normalize(ranked.Take(maximum).ToArray());
     }
+    /// <summary>Most cleanup calls revisit four or eight existing influences.
+    /// Keep their stable grouping and ranking without constructing a LINQ lookup.</summary>
+    public static Influence[] Cleanup(Influence[] source,int boneCount,int maximum)
+    {
+        if(source.Length>32)return Cleanup((IEnumerable<Influence>)source,boneCount,maximum);
+        if(maximum<=0||source.Length==0)return [];
+        Span<int> bones=stackalloc int[source.Length];Span<double> sums=stackalloc double[source.Length];int count=0;
+        foreach(var influence in source)
+        {
+            if(influence.Bone<0||influence.Bone>=boneCount||!float.IsFinite(influence.Weight)||influence.Weight<=0)continue;
+            int at=0;while(at<count&&bones[at]!=influence.Bone)at++;
+            if(at==count){bones[count]=influence.Bone;sums[count]=0;count++;}
+            sums[at]+=influence.Weight;
+        }
+        Span<Influence> ranked=stackalloc Influence[count];
+        for(int i=0;i<count;i++)
+        {
+            var value=new Influence(bones[i],(float)sums[i]);int at=i;
+            while(at>0&&value.Weight>ranked[at-1].Weight){ranked[at]=ranked[at-1];at--;}
+            ranked[at]=value;
+        }
+        return Normalize(ranked[..Math.Min(count,maximum)].ToArray());
+    }
     /// <summary>Dense solver fields already have one slot per bone. Select their
     /// strongest entries without allocating/grouping every zero and weak slot.</summary>
     internal static Influence[] Cleanup(float[] source,int maximum)
@@ -177,8 +200,10 @@ public static class Skinning
     {
         if(valid.Length==0)return [];
         float sum=valid.Sum(i=>i.Weight);
-        var trimmed=valid.Where(i=>i.Weight/sum>=.001f).ToArray();
-        sum=trimmed.Sum(i=>i.Weight);
-        return trimmed.Select(i=>i with{Weight=i.Weight/sum}).ToArray();
+        double retained=0;int count=0;
+        foreach(var influence in valid)if(influence.Weight/sum>=.001f){retained+=influence.Weight;count++;}
+        var result=new Influence[count];int index=0;float divisor=(float)retained;
+        foreach(var influence in valid)if(influence.Weight/sum>=.001f)result[index++]=influence with{Weight=influence.Weight/divisor};
+        return result;
     }
 }

@@ -44,7 +44,7 @@ public static class SurfaceRepair
             {
                 var f=faces[p][t];if(f.Area<=minimumArea)continue;
                 var normal=Vector3.Cross(pose.Points[p][f.B]-pose.Points[p][f.A],pose.Points[p][f.C]-pose.Points[p][f.A]);
-                if(Alignment(f,normal,rig.Weights[p],pose)<SurfaceOrientation.ReversalLimit||normal.Length()/f.Area<.025f||Enumerable.Range(0,3).Any(e=>{var(a,b,l)=f.Edge(e);return l>height*1e-6f&&Vector3.Distance(pose.Points[p][a],pose.Points[p][b])/l>4;}))pose.Reversed.Add((p,t));
+                if(Alignment(f,normal,rig.Weights[p],pose)<SurfaceOrientation.ReversalLimit||normal.Length()/f.Area<.025f||StretchedEdge(f,pose.Points[p],height))pose.Reversed.Add((p,t));
             }
             return pose;
         }).ToArray();
@@ -254,6 +254,15 @@ public static class SurfaceRepair
     }
     static float Alignment(Face face,Vector3 normal,Influence[][] weights,Pose pose)
         =>SurfaceOrientation.Alignment(face.Normal,normal,weights[face.A],weights[face.B],weights[face.C],pose.Rotations);
+    static bool StretchedEdge(Face face,Vector3[] points,float height)
+    {
+        for(int edge=0;edge<3;edge++)
+        {
+            var(a,b,length)=face.Edge(edge);
+            if(length>height*1e-6f&&Vector3.Distance(points[a],points[b])/length>4)return true;
+        }
+        return false;
+    }
 
     static bool TryCandidate(ImportedCharacter character,GeneratedRig rig,Pose[] poses,Face[] faces,int[] triangles,HashSet<int> region,int part,Influence[][] candidate,float minimumArea,float height,out double gain,bool commit=true)
     {

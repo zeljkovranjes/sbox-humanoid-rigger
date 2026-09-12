@@ -51,6 +51,9 @@ internal static class JointWeightRepair
                     var result=RigValidator.MeasurePose(character,candidate,specification,faces,buffer,height);
                     if(result.ReversedTriangles>=stress.ReversedTriangles||result.ReversedAreaFraction>stress.ReversedAreaFraction)continue;
                     trials.Add((candidate,result));
+                    // Only the best three trials are tested below. Release other
+                    // dense weight buffers immediately, preserving stable tie order.
+                    if(trials.Count>3)trials=trials.OrderBy(t=>t.Stress.ReversedTriangles).ThenBy(t=>t.Stress.ReversedAreaFraction).Take(3).ToList();
                 }
                 // A promising broad correction can expose a local seam. Run the
                 // normal cleanup and repair before deciding whether it is better.

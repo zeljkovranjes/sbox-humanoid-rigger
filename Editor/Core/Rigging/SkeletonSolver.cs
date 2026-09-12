@@ -4,7 +4,7 @@ namespace HumanoidRigger;
 using Vector3 = System.Numerics.Vector3;
 
 public sealed record RigBone(string Role,string Name,int Parent,Vector3 Position,Quaternion Rotation,bool Deform);
-public sealed record Influence(int Bone,float Weight);
+public readonly record struct Influence(int Bone,float Weight);
 public sealed class GeneratedRig
 {
     public RigProfile Profile {get;init;}=new();

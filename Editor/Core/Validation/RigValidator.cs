@@ -1,6 +1,5 @@
 #nullable enable annotations
 using System.Numerics;
-using System.Threading.Tasks;
 namespace HumanoidRigger;
 using Vector3 = System.Numerics.Vector3;
 
@@ -90,13 +89,8 @@ public static class RigValidator
         }
         // Poses read the same frozen weights and write separate buffers. Keep
         // report order and each pose's arithmetic serial and deterministic.
-        int workers=character.Meshes.Sum(m=>m.Vertices.Length)>=8192?Math.Min(4,Math.Max(1,Environment.ProcessorCount/2)):1;
-        if(workers==1)
-        {
-            var buffer=Buffers();for(int i=0;i<specifications.Length;i++)Measure(i,buffer);
-        }
-        else Parallel.For(0,specifications.Length,new ParallelOptions{MaxDegreeOfParallelism=workers},Buffers,
-            (i,_,buffer)=>{Measure(i,buffer);return buffer;},_=>{});
+        int workers=RigWork.WorkerCount(character.Meshes.Sum(m=>m.Vertices.Length));
+        RigWork.For(specifications.Length,workers,Buffers,Measure);
         for(int i=0;i<specifications.Length;i++)
         {
             var pose=specifications[i];var test=tests[i];

@@ -1,5 +1,4 @@
 namespace HumanoidRigger;
-using System.Threading.Tasks;
 using Vector3 = System.Numerics.Vector3;
 
 /// <summary>Region-constrained envelopes initialize a screened graph diffusion solve.
@@ -91,9 +90,8 @@ public static class Skinning
                 }
                 geodesic[b]=values;
             }
-            int traceWorkers=count>=8192?Math.Min(4,Math.Max(1,Environment.ProcessorCount/2)):1;
-            if(traceWorkers==1)for(int b=0;b<bones.Length;b++)TraceBone(b);
-            else Parallel.For(0,bones.Length,new ParallelOptions{MaxDegreeOfParallelism=traceWorkers},TraceBone);
+            int traceWorkers=RigWork.WorkerCount(count);
+            RigWork.For(bones.Length,traceWorkers,TraceBone);
             graph=new(edges,denominators,distances,nearest,geodesic);cache.Fields.Add(useRegionSeeds,graph);
             }
             for(int v=0;v<count;v++)
@@ -122,7 +120,7 @@ public static class Skinning
                 seeds[v]=weights;field[v]=(float[])weights.Clone();
             }
             var nextField=Enumerable.Range(0,count).Select(_=>new float[bones.Length]).ToArray();
-            int workers=count>=8192?Math.Min(4,Math.Max(1,Environment.ProcessorCount/2)):1;
+            int workers=RigWork.WorkerCount(count);
             void Diffuse(int worker)
             {
                 for(int v=worker*count/workers;v<(worker+1)*count/workers;v++)
@@ -139,8 +137,7 @@ public static class Skinning
             {
                 // Fixed vertex ranges share read-only input, then join before
                 // swapping fields. Each vertex keeps its original summation order.
-                if(workers==1)Diffuse(0);
-                else Parallel.For(0,workers,new ParallelOptions{MaxDegreeOfParallelism=workers},Diffuse);
+                RigWork.For(workers,workers,Diffuse);
                 (field,nextField)=(nextField,field);
             }
             result[part]=field.Select(w=>Cleanup(w,rig.Profile.MaximumInfluences)).ToArray();

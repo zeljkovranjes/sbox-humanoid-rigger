@@ -38,7 +38,7 @@ internal static class JointWeightRepair
                     if(Math.Abs(along)<height*.006f&&radial<height*.07f){sum+=radial;count++;}
                 }
                 float radius=Math.Clamp(count>0?sum/count:height*.025f,height*.01f,height*.065f);
-                var totals=rig.Weights.Select(part=>part.Select(weights=>weights.Where(w=>moving[w.Bone]).Sum(w=>w.Weight)).ToArray()).ToArray();
+                var totals=rig.Weights.Select(part=>part.Select(weights=>MovingTotal(weights,moving)).ToArray()).ToArray();
                 var axial=character.Meshes.Select(mesh=>mesh.Vertices.Select(point=>Vector3.Dot(point-bone.Position,axis)).ToArray()).ToArray();
                 var trials=new List<(GeneratedRig Rig,StressResult Stress)>();
                 var blends=stress.ReversedTriangles<16?new[]{-.025f,-.05f,-.1f,-.2f,-.35f,.025f,.05f,.1f,.2f,.35f}:new[]{.5f,1f};
@@ -69,6 +69,11 @@ internal static class JointWeightRepair
         }
         return rig;
     }
+    static float MovingTotal(Influence[] weights,bool[] moving)
+    {
+        double total=0;foreach(var w in weights)if(moving[w.Bone])total+=w.Weight;
+        return(float)total;
+    }
     static Influence[] Blend(Influence[] source,int maximum,int boneCount,bool[] moving,int parent,float total,float axial,float amount)
     {
         if(total<.0001f)return source;
@@ -77,9 +82,14 @@ internal static class JointWeightRepair
         {
             if(total>.9999f)return source;
             float target=total+(-amount)*total*(1-total)*(1-envelope);
-            return Skinning.Cleanup(source.Select(w=>w with{Weight=w.Weight*(moving[w.Bone]?target/total:(1-target)/(1-total))}),boneCount,maximum);
+            var scaled=new Influence[source.Length];
+            for(int i=0;i<source.Length;i++){var w=source[i];scaled[i]=w with{Weight=w.Weight*(moving[w.Bone]?target/total:(1-target)/(1-total))};}
+            return Skinning.Cleanup(scaled,boneCount,maximum);
         }
         float retained=1-amount+envelope*amount;
-        return Skinning.Cleanup(source.Select(w=>w with{Weight=w.Weight*(moving[w.Bone]?retained:1)}).Append(new(parent,total*(1-retained))),boneCount,maximum);
+        var blended=new Influence[source.Length+1];
+        for(int i=0;i<source.Length;i++){var w=source[i];blended[i]=w with{Weight=w.Weight*(moving[w.Bone]?retained:1)};}
+        blended[^1]=new(parent,total*(1-retained));
+        return Skinning.Cleanup(blended,boneCount,maximum);
     }
 }

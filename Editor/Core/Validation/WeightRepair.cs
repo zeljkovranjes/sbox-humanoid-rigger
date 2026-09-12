@@ -16,6 +16,7 @@ public static class WeightRepair
         if(!double.IsFinite(bestScore))return initial;
         var adjacency=geometry?.Neighbors??character.Meshes.Select(m=>Geometry.Neighbors(m)).ToArray();float height=geometry?.Height??character.AnatomicalHeight;var best=initial;
         var faces=geometry?.Faces??character.Meshes.Select(BindTriangle.Measure).ToArray();
+        var posed=character.Meshes.Select(m=>new Vector3[m.Vertices.Length]).ToArray();
         for(int iteration=0;iteration<64;iteration++)
         {
             var affected=character.Meshes.Select(m=>new HashSet<int>()).ToArray();
@@ -23,7 +24,8 @@ public static class WeightRepair
             {
                 var test=best.StressTests.FirstOrDefault(t=>t.Pose==pose.Name);
                 if(test is null||test.MaximumStretch<=3.8f&&test.MinimumAreaRatio>=.03f)continue;
-                var posed=Deformation.Pose(character,rig,pose);
+                var transforms=Deformation.BoneTransforms(rig,Deformation.JointRotations(rig,pose));
+                Deformation.ApplyTransforms(character,rig,transforms.Positions,transforms.Rotations,posed);
                 for(int part=0;part<character.Meshes.Length;part++)
                 {
                     var mesh=character.Meshes[part];var dst=posed[part];
@@ -38,7 +40,9 @@ public static class WeightRepair
                     }
                 }
             }
-            var old=rig.Weights;var candidate=old.Select(p=>p.Select(w=>(Influence[])w.Clone()).ToArray()).ToArray();
+            // Each edited vertex receives a new influence array below. Sharing
+            // the untouched arrays avoids copying every weight on every trial.
+            var old=rig.Weights;var candidate=old.Select(p=>(Influence[][])p.Clone()).ToArray();
             int changed=0;
             for(int part=0;part<candidate.Length;part++)
             {

@@ -1,5 +1,4 @@
 #nullable enable annotations
-using System.Threading.Tasks;
 namespace HumanoidRigger;
 using Vector3=System.Numerics.Vector3;
 
@@ -78,9 +77,8 @@ public static class HeatSkinning
             sources[v]=closest.Select(c=>c.Bone).ToArray();distances[v]=Math.Max(height*.002f,closest.Min(c=>c.Distance));
             if(closest.Min(c=>c.Air)==0)heat[v]=Math.Max(mass[v],height*height*1e-12)*sources[v].Length/(distances[v]*distances[v]);
         }
-        int workers=count>=8192?Math.Min(8,Math.Max(1,Environment.ProcessorCount/2)):1;
-        if(workers==1)for(int v=0;v<count;v++)FindSources(v);
-        else Parallel.For(0,count,new ParallelOptions{MaxDegreeOfParallelism=workers},FindSources);
+        int workers=RigWork.WorkerCount(count);
+        RigWork.For(count,workers,FindSources);
         if(sources.Any(s=>s is null))throw new InvalidOperationException("No anatomically compatible skinning source exists for a mesh region.");
         // Open or detached pieces still need a source. Fall back only in an entire
         // component with no visible source, without connecting it to another surface.
@@ -100,8 +98,7 @@ public static class HeatSkinning
         }
         // Each bone solves the same immutable matrix with independent vectors.
         // Preserve serial arithmetic within a solve and deterministic bone order.
-        if(workers==1)for(int b=0;b<rig.Bones.Length;b++)SolveBone(b);
-        else Parallel.For(0,rig.Bones.Length,new ParallelOptions{MaxDegreeOfParallelism=workers},SolveBone);
+        RigWork.For(rig.Bones.Length,workers,SolveBone);
         for(int b=0;b<rig.Bones.Length;b++)
         {
             var (values,residual)=solutions[b];if(values is null)continue;

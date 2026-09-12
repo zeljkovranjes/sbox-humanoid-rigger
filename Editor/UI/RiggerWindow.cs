@@ -216,7 +216,7 @@ public sealed class RiggerWindow : Widget
         SetBusy(true);
         try
         {
-            await Task.Run(()=>Session.Import(path));await new EditorThread();
+            await RigWork.Run(()=>Session.Import(path));await new EditorThread();
             if(!this.IsValid())return;
             previewMaterials=new Dictionary<int,string>();
             string textureWarning=null;
@@ -363,7 +363,7 @@ public sealed class RiggerWindow : Widget
     void StartPreparation()
     {
         preparingDraft=Session.CopyForContinuation();var draft=preparingDraft;
-        preparation=Task.Run(()=>{LastAdvanceWorkerWasMainThread=ThreadSafe.IsMainThread;draft.Continue();return draft;});
+        preparation=RigWork.Run(()=>{LastAdvanceWorkerWasMainThread=ThreadSafe.IsMainThread;draft.Continue();return draft;});
         _=preparation.ContinueWith(task=>{_ = task.Exception;},TaskContinuationOptions.OnlyOnFaulted);
     }
     void SchedulePreparation()

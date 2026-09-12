@@ -1,7 +1,7 @@
 namespace HumanoidRigger;
 using Vector3 = System.Numerics.Vector3;
 
-/// <summary>Stops leg motion from pulling the central lumbar surface sideways.</summary>
+/// <summary>Keeps limb motion from pulling the central spine surface sideways.</summary>
 public static class TorsoWeightRepair
 {
     /// <summary>Keep the lumbar correction only when all existing stress poses remain safe.</summary>
@@ -44,11 +44,18 @@ public static class TorsoWeightRepair
         float rise = rig.Bones[spine].Position.Y - hips.Y;
         if (halfWidth < .001f || rise < .001f) return 0;
         var legs = new bool[rig.Bones.Length];
+        var arms = new bool[rig.Bones.Length];
         var torso = new bool[rig.Bones.Length];
+        int shoulderLeft = Find("UpperArm.L"), shoulderRight = Find("UpperArm.R");
+        int chest = Find("Chest"), neck = Find("Neck");
+        float shoulderWidth = shoulderLeft < 0 || shoulderRight < 0 ? 0
+            : Math.Abs(rig.Bones[shoulderLeft].Position.X - rig.Bones[shoulderRight].Position.X) * .5f;
+        bool constrainShoulders = shoulderWidth > .001f && chest >= 0 && neck >= 0;
         for (int b = 0; b < rig.Bones.Length; b++)
         {
             legs[b] = b == left || b == right || rig.Bones[b].Parent >= 0 && legs[rig.Bones[b].Parent];
-            torso[b] = rig.Bones[b].Role is "Pelvis" or "SpineLower" or "SpineMid" or "Chest";
+            arms[b] = rig.Bones[b].Role is "Clavicle.L" or "Clavicle.R" || rig.Bones[b].Parent >= 0 && arms[rig.Bones[b].Parent];
+            torso[b] = rig.Bones[b].Role is "Pelvis" or "SpineLower" or "SpineMid" or "Chest" or "Neck";
         }
         static float Smooth(float x) { x = Math.Clamp(x, 0, 1); return x * x * (3 - 2 * x); }
         int changed = 0;
@@ -62,27 +69,43 @@ public static class TorsoWeightRepair
                 float central = 1 - Smooth((Math.Abs(point.X - hips.X) - halfWidth) / halfWidth);
                 float maximum = 1 - central * Smooth((point.Y - hips.Y) / rise);
                 var source = rig.Weights[part][v];
-                float legTotal = 0, torsoTotal = 0;
-                foreach (var w in source)
+                var adjusted = Limit(source, legs, maximum, pelvis);
+                if (constrainShoulders && point.Y >= rig.Bones[spine].Position.Y && point.Y <= rig.Bones[neck].Position.Y)
                 {
-                    if (legs[w.Bone]) legTotal += w.Weight;
-                    if (torso[w.Bone]) torsoTotal += w.Weight;
+                    // The shoulder blades may follow the clavicles; the middle of the
+                    // spine must follow the axial skeleton. Fade toward the shoulders
+                    // so their attachment remains free to articulate.
+                    float centerX = rig.Bones[chest].Position.X;
+                    float shoulderLimit = Smooth((Math.Abs(point.X - centerX) / shoulderWidth - .1f) / .6f);
+                    adjusted = Limit(adjusted, arms, shoulderLimit, chest);
                 }
-                if (legTotal <= maximum + .000001f) continue;
-                float removed = legTotal - maximum;
-                var adjusted = new Influence[source.Length + (torsoTotal > .000001f ? 0 : 1)];
-                for (int i = 0; i < source.Length; i++)
-                {
-                    var w = source[i];
-                    float factor = legs[w.Bone] ? maximum / legTotal
-                        : torso[w.Bone] && torsoTotal > .000001f ? 1 + removed / torsoTotal : 1;
-                    adjusted[i] = w with { Weight = w.Weight * factor };
-                }
-                if (torsoTotal <= .000001f) adjusted[^1] = new(pelvis, removed);
-                rig.Weights[part][v] = Skinning.Cleanup(adjusted, rig.Bones.Length, rig.Profile.MaximumInfluences);
+                if (ReferenceEquals(source, adjusted)) continue;
+                rig.Weights[part][v] = adjusted;
                 changed++;
             }
         }
         return changed;
+
+        Influence[] Limit(Influence[] source, bool[] limb, float maximum, int fallback)
+        {
+            float limbTotal = 0, torsoTotal = 0;
+            foreach (var w in source)
+            {
+                if (limb[w.Bone]) limbTotal += w.Weight;
+                if (torso[w.Bone]) torsoTotal += w.Weight;
+            }
+            if (limbTotal <= maximum + .000001f) return source;
+            float removed = limbTotal - maximum;
+            var adjusted = new Influence[source.Length + (torsoTotal > .000001f ? 0 : 1)];
+            for (int i = 0; i < source.Length; i++)
+            {
+                var w = source[i];
+                float factor = limb[w.Bone] ? maximum / limbTotal
+                    : torso[w.Bone] && torsoTotal > .000001f ? 1 + removed / torsoTotal : 1;
+                adjusted[i] = w with { Weight = w.Weight * factor };
+            }
+            if (torsoTotal <= .000001f) adjusted[^1] = new(fallback, removed);
+            return Skinning.Cleanup(adjusted, rig.Bones.Length, rig.Profile.MaximumInfluences);
+        }
     }
 }

@@ -90,6 +90,53 @@ Test("Missing torso influences fall back to the pelvis without losing weight", (
     TorsoWeightRepair.Apply(character, rig);
     Check(rig.Weights[0][0].SequenceEqual(new[] { new Influence(0, 1) }), "Descendant leg influence was not moved to the pelvis.");
 });
+(ImportedCharacter Character, GeneratedRig Rig) ShoulderFixture(float scale = 1)
+{
+    var (_, seed) = Fixture();
+    var bones = seed.Bones.Concat(new[]
+    {
+        new RigBone("Chest", "chest", 1, new(0, 140, 0), Quaternion.Identity, true),
+        new RigBone("Neck", "neck", 5, new(0, 155, 0), Quaternion.Identity, true),
+        new RigBone("Clavicle.L", "clavicle_l", 5, new(8, 151, 0), Quaternion.Identity, true),
+        new RigBone("UpperArm.L", "arm_l", 7, new(23, 151, 0), Quaternion.Identity, true),
+        new RigBone("Clavicle.R", "clavicle_r", 5, new(-8, 151, 0), Quaternion.Identity, true),
+        new RigBone("UpperArm.R", "arm_r", 9, new(-23, 151, 0), Quaternion.Identity, true)
+    }).Select(b => b with { Position = b.Position * scale }).ToArray();
+    return (new ImportedCharacter { Meshes = [new("back", new[] { new Vector3(0, 142, -10), new(1, 143, -10), new(-1, 143, -10) }.Select(p => p * scale).ToArray(), [0, 1, 2], MeshKind.Body)] },
+        new GeneratedRig { Profile = seed.Profile, Bones = bones,
+            Weights = [Enumerable.Range(0, 3).Select(_ => new Influence[] { new(5, .35f), new(1, .15f), new(7, .35f), new(9, .15f) }).ToArray()] });
+}
+
+foreach (float scale in new[] { .01f, 1f, 10f })
+Test($"Asymmetric shoulder motion cannot drag the central back, scale {scale}", () =>
+{
+    var (character, rig) = ShoulderFixture(scale);
+    var motion = new Dictionary<string, Quaternion> { ["Clavicle.L"] = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, .7f) };
+    var before = Deformation.ApplyRotations(character, rig, motion)[0];
+    Check(Vector3.Distance(before[0], character.Meshes[0].Vertices[0]) > scale, "Fixture did not reproduce shoulder pulling.");
+    Check(TorsoWeightRepair.Apply(character, rig) == 3, "Shoulder influence was not repaired.");
+    var after = Deformation.ApplyRotations(character, rig, motion)[0];
+    Check(after.Zip(character.Meshes[0].Vertices).All(p => Vector3.Distance(p.First, p.Second) < scale * .0001f), "Shoulder still moves the central back.");
+    Check(rig.Weights[0].All(w => w.Length <= 4 && Math.Abs(w.Sum(i => i.Weight) - 1) < .00001f), "Invalid repaired weights.");
+    Check(TorsoWeightRepair.Apply(character, rig) == 0, "Shoulder repair is not idempotent.");
+});
+
+Test("Shoulder attachment remains mobile with a continuous transition from the spine", () =>
+{
+    float previous = 0;
+    for (int x = 0; x <= 23; x++)
+    {
+        var (character, rig) = ShoulderFixture();
+        character.Meshes[0].Vertices[0] = new(x, 145, -10);
+        rig.Weights[0][0] = [new(8, .9f), new(5, .1f)];
+        TorsoWeightRepair.Apply(character, rig);
+        float current = rig.Weights[0][0].Where(w => w.Bone == 8).Sum(w => w.Weight);
+        Check(current >= previous - .00001f && current - previous < .12f, "Abrupt shoulder transition.");
+        if (x == 23) Check(Math.Abs(current - .9f) < .00001f, "Shoulder attachment was immobilized.");
+        previous = current;
+    }
+});
+
 Test("Unvalidated skin is not accepted as a safe baseline", () =>
 {
     var (character, rig) = Fixture();

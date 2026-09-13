@@ -30,6 +30,11 @@ internal static class JointCoverage
     {
         if(!rig.Report.Passed)return rig;
         var geometry=new ValidationGeometry(character);var checks=Measure(character,rig,geometry);
+        if(checks.Any(c=>Bad(c.Result)))
+        {
+            var repaired=PoseWeightRepair.Improve(character,rig,geometry,checks);
+            if(!ReferenceEquals(repaired,rig)){rig=repaired;checks=Measure(character,rig,geometry);}
+        }
         var trunk=new TrunkRegion(character,rig);
         var normalHeat=new Lazy<Influence[][][]>(()=>HeatSkinning.Candidates(character,rig,normalPrior:true,trunk:trunk).First());
         var heat=new Lazy<Influence[][][]>(()=>HeatSkinning.Solve(character,rig));

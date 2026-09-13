@@ -10,7 +10,7 @@ internal static class JointWeightRepair
     internal static GeneratedRig Improve(ImportedCharacter character,GeneratedRig rig,ValidationGeometry? geometry=null)
     {
         var roles=rig.Bones.Select(b=>b.Role).ToHashSet();
-        var specifications=Deformation.Poses.Where(p=>Deformation.IsApplicable(p,roles)).ToArray();
+        var specifications=(geometry?.Poses??Deformation.Poses).Where(p=>Deformation.IsApplicable(p,roles)).ToArray();
         var expected=specifications.Select(p=>p.Name).Order().ToArray();
         if(!WeightRepair.HasCompleteEvidence(rig.Report,expected)||rig.Report.StressTests.All(p=>p.ReversedTriangles==0))return rig;
         geometry??=new ValidationGeometry(character);var faces=geometry.Faces;
@@ -25,7 +25,7 @@ internal static class JointWeightRepair
                 var stress=rig.Report.StressTests.Single(p=>p.Pose==scheduled.Pose);
                 if(stress.ReversedTriangles==0)continue;
                 var specification=specifications.Single(p=>p.Name==stress.Pose);
-                if(!new[]{"UpperArm.","LowerArm.","UpperLeg.","LowerLeg."}.Any(specification.Role.StartsWith))continue;
+                if(geometry.Poses.Count==Deformation.Poses.Count&&!new[]{"UpperArm.","LowerArm.","UpperLeg.","LowerLeg."}.Any(specification.Role.StartsWith))continue;
                 int joint=Array.FindIndex(rig.Bones,b=>b.Role==specification.Role);var bone=rig.Bones[joint];
                 var child=rig.Bones.FirstOrDefault(b=>b.Parent==joint&&b.Deform);
                 if(child is null||bone.Parent<0||!rig.Bones[bone.Parent].Deform||Vector3.DistanceSquared(child.Position,bone.Position)<1e-8f)continue;

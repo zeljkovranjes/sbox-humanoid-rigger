@@ -9,8 +9,9 @@ public static class HeatSkinning
 {
     public static Influence[][][] Solve(ImportedCharacter character,GeneratedRig rig)
         =>Candidates(character,rig).First();
-    internal static IEnumerable<Influence[][][]> Candidates(ImportedCharacter character,GeneratedRig rig)
+    internal static IEnumerable<Influence[][][]> Candidates(ImportedCharacter character,GeneratedRig rig,bool normalPrior=false,TrunkRegion? trunk=null)
     {
+
         float height=character.AnatomicalHeight,tolerance=height*1e-5f;
         var mesh=Geometry.Merge(character.Meshes);var adjacency=Geometry.Neighbors(mesh,tolerance);
         var digits=SkinRegions.DetachedDigits(mesh,adjacency,rig.Anatomy);
@@ -32,6 +33,12 @@ public static class HeatSkinning
             mapping[v]=node;sums[node]+=mesh.Vertices[v];counts[node]++;
         }
         var points=sums.Select((p,i)=>p/counts[i]).ToArray();int count=points.Length;
+        var normals=normalPrior?SkinningNormals.ClosedSurface(points,mesh.Triangles.Select(v=>mapping[v]).ToArray()):null;
+        var trunkNodes=new bool[count];
+        if(trunk is not null)
+        {
+            int offset=0;foreach(var part in trunk.Vertices)foreach(bool belongs in part){if(belongs)trunkNodes[mapping[offset]]=true;offset++;}
+        }
         var handNodes=hands.ToDictionary(p=>p.Key,p=>Enumerable.Range(0,count).Select(_=>false).ToArray());
         foreach(var hand in hands)for(int v=0;v<parent.Length;v++)if(hand.Value[v])handNodes[hand.Key][mapping[v]]=true;
         var edges=Enumerable.Range(0,count).Select(_=>new Dictionary<int,double>()).ToArray();var mass=new double[count];
@@ -59,7 +66,16 @@ public static class HeatSkinning
                 var bone=rig.Bones[b];
                 if(!bone.Deform||!SkinRegions.Allows(ownership[v],bone.Role)||bone.Role.EndsWith(".L")&&points[v].X<center-height*.025f||bone.Role.EndsWith(".R")&&points[v].X>center+height*.025f)continue;
                 if(Profiles.Fingers.Any(f=>bone.Role.StartsWith(f))&&handNodes.TryGetValue(bone.Role[^1..],out var hand)&&!hand[v])continue;
+                float support=1;
+                if(trunkNodes[v])foreach(var attachment in trunk!.Attachments)if(attachment.Moving[b])support=Math.Min(support,attachment.Support(points[v]));
+                if(support<=0)continue;
                 var anchor=Geometry.ClosestOnSegment(points[v],bone.Position,ends[b]);float distance=Vector3.Distance(points[v],anchor);
+                if(normals is not null&&normals[v]!=Vector3.Zero&&distance>tolerance)
+                {
+                    float alignment=Vector3.Dot(normals[v],(points[v]-anchor)/distance);
+                    distance/=Math.Max(.05f,(1+alignment)*.5f);
+                }
+                distance/=Math.Max(support,.001f);
                 eligible.Add((b,distance,anchor));
             }
             if(eligible.Count==0)return;

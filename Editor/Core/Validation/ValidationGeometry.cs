@@ -1,3 +1,4 @@
+#nullable enable annotations
 namespace HumanoidRigger;
 using Vector3=System.Numerics.Vector3;
 
@@ -14,8 +15,12 @@ internal sealed class ValidationGeometry
     internal BindTriangle[][] Faces=>faces.Value;
     internal List<int>[][] Neighbors=>neighbors.Value;
     internal List<int>[][] Touching=>touching.Value;
-    internal ValidationGeometry(ImportedCharacter character)
+    internal IReadOnlyList<StressPose> Poses {get;}
+    internal TrunkRegion? Trunk {get;}
+    internal ValidationGeometry(ImportedCharacter character,IReadOnlyList<StressPose>? poses=null,TrunkRegion? trunk=null)
     {
+        Trunk=trunk;
+        Poses=poses??Deformation.Poses;
         Height=character.AnatomicalHeight;
         body=new(()=>character.Meshes.Where(m=>m.Kind==MeshKind.Body).SelectMany(m=>m.Vertices).ToArray());
         faces=new(()=>character.Meshes.Select(BindTriangle.Measure).ToArray());

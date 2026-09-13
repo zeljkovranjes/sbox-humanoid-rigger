@@ -11,7 +11,8 @@ public static class WeightRepair
     {
         if(initial.Passed||initial.Issues.Any(i=>i.Error&&i.Code!="deformation"))return initial;
         var roles=rig.Bones.Select(b=>b.Role).ToHashSet();
-        var expectedPoses=Deformation.Poses.Where(p=>Deformation.IsApplicable(p,roles)).Select(p=>p.Name).Order().ToArray();
+        var specifications=geometry?.Poses??Deformation.Poses;
+        var expectedPoses=specifications.Where(p=>Deformation.IsApplicable(p,roles)).Select(p=>p.Name).Order().ToArray();
         double bestScore=Score(initial,expectedPoses);
         if(!double.IsFinite(bestScore))return initial;
         var adjacency=geometry?.Neighbors??character.Meshes.Select(m=>Geometry.Neighbors(m)).ToArray();float height=geometry?.Height??character.AnatomicalHeight;var best=initial;
@@ -20,7 +21,7 @@ public static class WeightRepair
         for(int iteration=0;iteration<64;iteration++)
         {
             var affected=character.Meshes.Select(m=>new HashSet<int>()).ToArray();
-            foreach(var pose in Deformation.Poses)
+            foreach(var pose in specifications)
             {
                 var test=best.StressTests.FirstOrDefault(t=>t.Pose==pose.Name);
                 if(test is null||test.MaximumStretch<=3.8f&&test.MinimumAreaRatio>=.03f)continue;

@@ -9,3 +9,11 @@ This is an independent C# implementation of the mathematical method. No Pinocchi
 source code or model data is included. Triangle visibility, disconnected-shell
 handling, hand-region constraints, influence limiting and validation acceptance
 are implemented in this project.
+
+The solver also uses reliable outward surface normals to refine heat sources,
+and measured limb cross sections to prevent remote arm, leg and neck weights on
+the trunk. The normal-aware distance prior was studied in Blender's
+[bone heat implementation](https://github.com/blender/blender/blob/main/source/blender/editors/armature/meshlaplacian.cc).
+The C# implementation is independent; no Blender skinning source is included.
+Repairs retain mesh connectivity and must pass both the standard deformation
+poses and additional tests covering every deforming joint.

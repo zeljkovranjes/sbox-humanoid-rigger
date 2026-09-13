@@ -25,12 +25,14 @@ public static class SurfaceRepair
 
     internal static ValidationReport TryWeights(ImportedCharacter character,GeneratedRig rig,ValidationReport initial,Influence[][][] weights)
         =>Improve(character,rig,initial,weights,null);
+    internal static ValidationReport TryWeights(ImportedCharacter character,GeneratedRig rig,ValidationReport initial,Influence[][][] weights,ValidationGeometry geometry)
+        =>Improve(character,rig,initial,weights,geometry);
 
     static ValidationReport Improve(ImportedCharacter character,GeneratedRig rig,ValidationReport initial,Influence[][][]? proposed,ValidationGeometry? geometry)
     {
         if(initial.Issues.Any(i=>i.Error&&i.Code!="deformation")||initial.StressTests.All(t=>t.ReversedTriangles==0&&t.MaximumStretch<=4&&t.MinimumAreaRatio>=.025f))return initial;
         var roles=rig.Bones.Select(b=>b.Role).ToHashSet();
-        var specifications=Deformation.Poses.Where(p=>Deformation.IsApplicable(p,roles)).ToArray();
+        var specifications=(geometry?.Poses??Deformation.Poses).Where(p=>Deformation.IsApplicable(p,roles)).ToArray();
         if(!WeightRepair.HasCompleteEvidence(initial,specifications.Select(p=>p.Name).Order().ToArray())||
             !initial.StressTests.Select(p=>p.Pose).SequenceEqual(specifications.Select(p=>p.Name)))return initial;
         geometry??=new ValidationGeometry(character);
@@ -59,7 +61,7 @@ public static class SurfaceRepair
                     var region=Enumerable.Range(0,rig.Weights[part].Length).Where(v=>!rig.Weights[part][v].SequenceEqual(proposed[part][v])).ToHashSet();
                     if(region.Count==0||region.Any(v=>!Local(proposed[part][v],character.Meshes[part].Vertices[v])))continue;
                     var triangles=region.SelectMany(v=>touching[part][v]).Distinct().Order().ToArray();
-                    if(!TryCandidate(character,rig,poses,faces[part],triangles,region,part,proposed[part],minimumArea,height,out _))continue;
+                    if(!TryCandidate(character,rig,poses,faces[part],triangles,region,part,proposed[part],minimumArea,height,geometry,out _))continue;
                     accepted++;foreach(int v in region)edited.Add((part,v));
                 }
             }
@@ -112,14 +114,14 @@ public static class SurfaceRepair
                                     if(trials>=partBudget||localTrials>=TransfersPerNeighborhood/2)break;trials++;localTrials++;
                                     if(!Local(weights,character.Meshes[part].Vertices[v]))continue;
                                     candidate[v]=weights;
-                                    bool valid=TryCandidate(character,rig,poses,faces[part],touching[part][v].ToArray(),[v],part,candidate,minimumArea,height,out double gain,false);
+                                    bool valid=TryCandidate(character,rig,poses,faces[part],touching[part][v].ToArray(),[v],part,candidate,minimumArea,height,geometry,out double gain,false);
                                     candidate[v]=rig.Weights[part][v];
                                     if(valid&&gain>bestGain){bestWeights=weights;bestVertex=v;bestGain=gain;}
                                 }
                                 if(bestWeights is not null)
                                 {
                                     candidate[bestVertex]=bestWeights;
-                                    if(TryCandidate(character,rig,poses,faces[part],touching[part][bestVertex].ToArray(),[bestVertex],part,candidate,minimumArea,height,out _))
+                                    if(TryCandidate(character,rig,poses,faces[part],touching[part][bestVertex].ToArray(),[bestVertex],part,candidate,minimumArea,height,geometry,out _))
                                     {accepted++;edited.Add((part,bestVertex));}
                                 }
                                 else
@@ -134,7 +136,7 @@ public static class SurfaceRepair
                                         if(!Local(pair.First,character.Meshes[part].Vertices[pair.A])||!Local(pair.Second,character.Meshes[part].Vertices[pair.B]))continue;
                                         var pairFaces=touching[part][pair.A].Concat(touching[part][pair.B]).Distinct().Order().ToArray();
                                         candidate[pair.A]=pair.First;candidate[pair.B]=pair.Second;
-                                        bool valid=TryCandidate(character,rig,poses,faces[part],pairFaces,[pair.A,pair.B],part,candidate,minimumArea,height,out double gain,false);
+                                        bool valid=TryCandidate(character,rig,poses,faces[part],pairFaces,[pair.A,pair.B],part,candidate,minimumArea,height,geometry,out double gain,false);
                                         candidate[pair.A]=rig.Weights[part][pair.A];candidate[pair.B]=rig.Weights[part][pair.B];
                                         if(valid&&gain>bestGain){bestPair=pair;bestGain=gain;}
                                     }
@@ -142,7 +144,7 @@ public static class SurfaceRepair
                                     {
                                         candidate[best.A]=best.First;candidate[best.B]=best.Second;
                                         var pairFaces=touching[part][best.A].Concat(touching[part][best.B]).Distinct().Order().ToArray();
-                                        if(TryCandidate(character,rig,poses,faces[part],pairFaces,[best.A,best.B],part,candidate,minimumArea,height,out _))
+                                        if(TryCandidate(character,rig,poses,faces[part],pairFaces,[best.A,best.B],part,candidate,minimumArea,height,geometry,out _))
                                         {accepted++;edited.Add((part,best.A));edited.Add((part,best.B));}
                                     }
                                 }
@@ -162,7 +164,7 @@ public static class SurfaceRepair
                                     candidate[v]=Skinning.Cleanup(values,rig.Profile.MaximumInfluences);
                                     if(!Local(candidate[v],character.Meshes[part].Vertices[v]))valid=false;
                                 }
-                                if(!valid||!TryCandidate(character,rig,poses,faces[part],triangles,region,part,candidate,minimumArea,height,out _))continue;
+                                if(!valid||!TryCandidate(character,rig,poses,faces[part],triangles,region,part,candidate,minimumArea,height,geometry,out _))continue;
                                 accepted++;foreach(int v in region)edited.Add((part,v));break;
                             }
                         }
@@ -205,10 +207,10 @@ public static class SurfaceRepair
                     var region=Enumerable.Range(0,candidate.Length).Where(v=>!candidate[v].SequenceEqual(rig.Weights[part][v])).ToHashSet();
                     if(region.Count==0||region.Any(v=>!Local(candidate[v],character.Meshes[part].Vertices[v])))continue;
                     var triangles=region.SelectMany(v=>touching[part][v]).Distinct().Order().ToArray();
-                    if(!TryCandidate(character,rig,poses,faces[part],triangles,region,part,candidate,minimumArea,height,out double gain,false)||gain<=bestGain)continue;
+                    if(!TryCandidate(character,rig,poses,faces[part],triangles,region,part,candidate,minimumArea,height,geometry,out double gain,false)||gain<=bestGain)continue;
                     best=candidate;bestRegion=region;bestFaces=triangles;bestGain=gain;
                 }
-                if(best is not null&&TryCandidate(character,rig,poses,faces[part],bestFaces!,bestRegion!,part,best,minimumArea,height,out _))
+                if(best is not null&&TryCandidate(character,rig,poses,faces[part],bestFaces!,bestRegion!,part,best,minimumArea,height,geometry,out _))
                 {accepted++;foreach(int v in bestRegion!)edited.Add((part,v));}
             }
         }
@@ -264,9 +266,10 @@ public static class SurfaceRepair
         return false;
     }
 
-    static bool TryCandidate(ImportedCharacter character,GeneratedRig rig,Pose[] poses,Face[] faces,int[] triangles,HashSet<int> region,int part,Influence[][] candidate,float minimumArea,float height,out double gain,bool commit=true)
+    static bool TryCandidate(ImportedCharacter character,GeneratedRig rig,Pose[] poses,Face[] faces,int[] triangles,HashSet<int> region,int part,Influence[][] candidate,float minimumArea,float height,ValidationGeometry geometry,out double gain,bool commit=true)
     {
         gain=0;
+        if(geometry.Trunk is not null&&region.Any(v=>!geometry.Trunk.Allows(part,v,character.Meshes[part].Vertices[v],candidate[v])))return false;
         var vertices=region.ToArray();
         // Most trials move one vertex or an edge. Reuse a compact buffer while
         // scoring instead of allocating a dictionary and set for every pose.

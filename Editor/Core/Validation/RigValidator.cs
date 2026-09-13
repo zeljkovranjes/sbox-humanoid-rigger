@@ -9,6 +9,7 @@ public sealed class ValidationReport
 {
     public List<ValidationIssue> Issues {get;}=[];
     public List<StressResult> StressTests {get;}=[];
+    public List<StressResult> JointStressTests {get;}=[];
     public int Repairs {get;set;}
     public int RepairPasses {get;set;}
     public bool Passed=>Issues.All(i=>!i.Error) && StressTests.Count>0;
@@ -64,6 +65,7 @@ public static class RigValidator
             }
         }
         if(r.Issues.Any(i=>i.Error))return r;
+        if(geometry?.Trunk?.HasBleeding(character,rig)==true){Error("weight-bleeding","A weight repair reintroduced a remote torso attachment.");return r;}
         var ends=RigGeometry.SegmentEnds(rig);
         var locality=new SkinningLocality(character,rig,ends);
         for(int p=0;p<character.Meshes.Length;p++)
@@ -80,7 +82,7 @@ public static class RigValidator
         }
         if(r.Issues.Any(i=>i.Error))return r;
         faces??=geometry?.Faces??character.Meshes.Select(BindTriangle.Measure).ToArray();
-        var specifications=Deformation.Poses.ToArray();
+        var specifications=(geometry?.Poses??Deformation.Poses).ToArray();
         var tests=new StressResult[specifications.Length];
         Vector3[][] Buffers()=>character.Meshes.Select(m=>new Vector3[m.Vertices.Length]).ToArray();
         void Measure(int i,Vector3[][] buffer)

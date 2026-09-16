@@ -58,7 +58,8 @@ public static class TextureFiles
         }
         return character.Materials.Select(m=>m with{
             ColorTexture=Resolve(m.ColorTexture),NormalTexture=Resolve(m.NormalTexture),RoughnessTexture=Resolve(m.RoughnessTexture),MetallicRoughnessTexture=Resolve(m.MetallicRoughnessTexture),
-            MetalnessTexture=Resolve(m.MetalnessTexture),OcclusionTexture=Resolve(m.OcclusionTexture),EmissiveTexture=Resolve(m.EmissiveTexture),OpacityTexture=Resolve(m.OpacityTexture)
+            MetalnessTexture=Resolve(m.MetalnessTexture),OcclusionTexture=Resolve(m.OcclusionTexture),EmissiveTexture=Resolve(m.EmissiveTexture),OpacityTexture=Resolve(m.OpacityTexture),
+            SpecularGlossiness=m.SpecularGlossiness is {} sg?sg with{DiffuseTexture=Resolve(sg.DiffuseTexture),SpecularGlossinessTexture=Resolve(sg.SpecularGlossinessTexture)}:null
         }).ToArray();
     }
     static string? ImageExtension(byte[] header)
@@ -73,7 +74,8 @@ public static class TextureFiles
         string? Prefix(string? path)=>path is null?null:directory.Replace('\\','/').TrimEnd('/')+"/"+path;
         return materials.Select(m=>m with{
         ColorTexture=Prefix(m.ColorTexture),NormalTexture=Prefix(m.NormalTexture),RoughnessTexture=Prefix(m.RoughnessTexture),MetallicRoughnessTexture=Prefix(m.MetallicRoughnessTexture),
-        MetalnessTexture=Prefix(m.MetalnessTexture),OcclusionTexture=Prefix(m.OcclusionTexture),EmissiveTexture=Prefix(m.EmissiveTexture),OpacityTexture=Prefix(m.OpacityTexture)
+        MetalnessTexture=Prefix(m.MetalnessTexture),OcclusionTexture=Prefix(m.OcclusionTexture),EmissiveTexture=Prefix(m.EmissiveTexture),OpacityTexture=Prefix(m.OpacityTexture),
+        SpecularGlossiness=m.SpecularGlossiness is {} sg?sg with{DiffuseTexture=Prefix(sg.DiffuseTexture),SpecularGlossinessTexture=Prefix(sg.SpecularGlossinessTexture)}:null
         }).ToArray();
     }
 }

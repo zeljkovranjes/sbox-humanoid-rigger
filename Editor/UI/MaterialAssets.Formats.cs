@@ -25,7 +25,7 @@ internal static partial class MaterialAssets
         static byte Channel(float value)=>(byte)Math.Clamp((int)MathF.Round(value),0,255);
         return source.Select((original,index)=>
         {
-            var m=original with{};
+            var m=ConvertSpecularGlossiness(original with{},directory,index);
             string WriteMap(string suffix,int width,int height,Func<int,int,SKColor> pixel)
             {
                 using var bitmap=new SKBitmap(width,height,SKColorType.Rgba8888,SKAlphaType.Unpremul);

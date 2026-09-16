@@ -14,7 +14,8 @@ internal static class GltfMaterials
         {
             if(info.ValueKind!=JsonValueKind.Object)return null;
             var texture=root.GetProperty("textures")[info.GetProperty("index").GetInt32()];
-            int index=texture.GetProperty("source").GetInt32();var image=root.GetProperty("images")[index];
+            var webp=Property(Property(texture,"extensions"),"EXT_texture_webp");
+            int index=(webp.ValueKind==JsonValueKind.Object?webp:texture).GetProperty("source").GetInt32();var image=root.GetProperty("images")[index];
             if(image.TryGetProperty("uri",out var uri)&&!uri.GetString()!.StartsWith("data:",StringComparison.OrdinalIgnoreCase))
             {
                 string requested=ModelImporter.DependencyPath(path,uri.GetString()!);
@@ -41,9 +42,13 @@ internal static class GltfMaterials
         return materials.EnumerateArray().Select((m,i)=>
         {
             m.TryGetProperty("pbrMetallicRoughness",out var pbr);
+            var sg=Property(Property(m,"extensions"),"KHR_materials_pbrSpecularGlossiness");
+            // The extension takes precedence; unused fallback maps must not
+            // produce missing-image warnings or require another image decoder.
+            if(sg.ValueKind==JsonValueKind.Object)pbr=default;
             var factor=Property(pbr,"baseColorFactor");var emissive=Property(m,"emissiveFactor");
             string alpha=m.TryGetProperty("alphaMode",out var mode)?mode.GetString()!:"OPAQUE";
-            return new SourceMaterial{Name=m.TryGetProperty("name",out var name)?name.GetString()!:"material_"+i,AuthoredPbr=true,Unlit=Property(Property(m,"extensions"),"KHR_materials_unlit").ValueKind==JsonValueKind.Object,
+            var result=new SourceMaterial{Name=m.TryGetProperty("name",out var name)?name.GetString()!:"material_"+i,AuthoredPbr=true,Unlit=Property(Property(m,"extensions"),"KHR_materials_unlit").ValueKind==JsonValueKind.Object,
                 ColorFactor=factor.ValueKind==JsonValueKind.Array?new Vector3(factor[0].GetSingle(),factor[1].GetSingle(),factor[2].GetSingle()):Vector3.One,
                 OpacityFactor=factor.ValueKind==JsonValueKind.Array?factor[3].GetSingle():1,
                 ColorTexture=Texture(Property(pbr,"baseColorTexture")),MetallicRoughnessTexture=Texture(Property(pbr,"metallicRoughnessTexture")),
@@ -51,6 +56,18 @@ internal static class GltfMaterials
                 NormalTexture=Texture(Property(m,"normalTexture")),OcclusionTexture=Texture(Property(m,"occlusionTexture")),EmissiveTexture=Texture(Property(m,"emissiveTexture")),
                 EmissiveFactor=emissive.ValueKind==JsonValueKind.Array?new Vector3(emissive[0].GetSingle(),emissive[1].GetSingle(),emissive[2].GetSingle()):Vector3.Zero,
                 DoubleSided=m.TryGetProperty("doubleSided",out var two)&&two.GetBoolean(),AlphaTest=alpha=="MASK",Translucent=alpha=="BLEND",AlphaCutoff=Float(m,"alphaCutoff",.5f)};
+            if(sg.ValueKind==JsonValueKind.Object)
+            {
+                var diffuse=Property(sg,"diffuseFactor");var specular=Property(sg,"specularFactor");
+                var source=new SpecularGlossinessMaterial{
+                    DiffuseFactor=diffuse.ValueKind==JsonValueKind.Array?new(diffuse[0].GetSingle(),diffuse[1].GetSingle(),diffuse[2].GetSingle(),diffuse[3].GetSingle()):System.Numerics.Vector4.One,
+                    SpecularFactor=specular.ValueKind==JsonValueKind.Array?new(specular[0].GetSingle(),specular[1].GetSingle(),specular[2].GetSingle()):Vector3.One,
+                    GlossinessFactor=Float(sg,"glossinessFactor",1),DiffuseTexture=Texture(Property(sg,"diffuseTexture")),SpecularGlossinessTexture=Texture(Property(sg,"specularGlossinessTexture"))};
+                var converted=source.Evaluate(System.Numerics.Vector4.One,System.Numerics.Vector4.One);
+                result.SpecularGlossiness=source;result.ColorTexture=source.DiffuseTexture;result.ColorFactor=converted.Color;result.OpacityFactor=converted.Opacity;
+                result.MetallicRoughnessTexture=null;result.MetallicFactor=converted.Metallic;result.RoughnessFactor=converted.Roughness;
+            }
+            return result;
         }).ToArray();
     }
     internal static JsonElement Property(JsonElement element,string name)=>element.ValueKind==JsonValueKind.Object&&element.TryGetProperty(name,out var value)?value:default;
@@ -58,7 +75,10 @@ internal static class GltfMaterials
     public static (int Set,Vector2 Offset,Vector2 Scale,float Rotation) UvTransform(JsonElement material)
     {
         var infos=new List<JsonElement>();var pbr=Property(material,"pbrMetallicRoughness");
-        foreach(string name in new[]{"baseColorTexture","metallicRoughnessTexture"}){var value=Property(pbr,name);if(value.ValueKind==JsonValueKind.Object)infos.Add(value);}
+        var sg=Property(Property(material,"extensions"),"KHR_materials_pbrSpecularGlossiness");
+        var workflow=sg.ValueKind==JsonValueKind.Object?sg:pbr;
+        foreach(string name in sg.ValueKind==JsonValueKind.Object?new[]{"diffuseTexture","specularGlossinessTexture"}:new[]{"baseColorTexture","metallicRoughnessTexture"})
+        {var value=Property(workflow,name);if(value.ValueKind==JsonValueKind.Object)infos.Add(value);}
         foreach(string name in new[]{"normalTexture","occlusionTexture","emissiveTexture"}){var value=Property(material,name);if(value.ValueKind==JsonValueKind.Object)infos.Add(value);}
         var transforms=infos.Select(info=>
         {

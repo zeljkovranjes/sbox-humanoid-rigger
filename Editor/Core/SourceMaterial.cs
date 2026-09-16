@@ -8,6 +8,7 @@ namespace HumanoidRigger;
 		public System.Numerics.Vector3? ColorFactor { get; set; }
 		public bool VertexColors { get; set; }
 		public bool AuthoredPbr { get; set; }
+		public SpecularGlossinessMaterial SpecularGlossiness { get; set; }
 		public bool Unlit { get; set; }
 		public string MetallicRoughnessTexture { get; set; }
 		public float MetallicFactor { get; set; } = 1;

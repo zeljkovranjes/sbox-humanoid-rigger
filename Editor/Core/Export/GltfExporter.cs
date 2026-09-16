@@ -116,7 +116,17 @@ public static class GltfExporter
             if(Texture(m.MetallicRoughnessTexture) is {} packed)pbr["metallicRoughnessTexture"]=packed;
             var result=new Dictionary<string,object>{["name"]=m.Name??"material",["pbrMetallicRoughness"]=pbr,["doubleSided"]=m.DoubleSided,["alphaMode"]=m.Translucent?"BLEND":m.AlphaTest?"MASK":"OPAQUE"};
             if(m.AlphaTest)result["alphaCutoff"]=m.AlphaCutoff;
-            if(m.Unlit)result["extensions"]=new Dictionary<string,object>{["KHR_materials_unlit"]=new{}};
+            var extensions=new Dictionary<string,object>();
+            if(m.Unlit)extensions["KHR_materials_unlit"]=new{};
+            if(m.SpecularGlossiness is {} sg)
+            {
+                var properties=new Dictionary<string,object>{["diffuseFactor"]=new[]{sg.DiffuseFactor.X,sg.DiffuseFactor.Y,sg.DiffuseFactor.Z,sg.DiffuseFactor.W},
+                    ["specularFactor"]=new[]{sg.SpecularFactor.X,sg.SpecularFactor.Y,sg.SpecularFactor.Z},["glossinessFactor"]=sg.GlossinessFactor};
+                if(Texture(sg.DiffuseTexture) is {} diffuse)properties["diffuseTexture"]=diffuse;
+                if(Texture(sg.SpecularGlossinessTexture) is {} specular)properties["specularGlossinessTexture"]=specular;
+                extensions["KHR_materials_pbrSpecularGlossiness"]=properties;
+            }
+            if(extensions.Count>0)result["extensions"]=extensions;
             foreach(var (key,path) in new[]{("normalTexture",m.NormalTexture),("occlusionTexture",m.OcclusionTexture),("emissiveTexture",m.EmissiveTexture)})if(Texture(path) is {} info)result[key]=info;
             var emission=m.AuthoredPbr||m.EmissiveTexture is not null?m.EmissiveFactor:Vector3.Zero;result["emissiveFactor"]=new[]{emission.X,emission.Y,emission.Z};return result;
         }).ToArray();
@@ -124,7 +134,9 @@ public static class GltfExporter
         byte[] data=stream.ToArray();var buffer=new Dictionary<string,object>{["byteLength"]=data.Length};if(!binary)buffer["uri"]=UriPath(bufferName);
         var document=new Dictionary<string,object>{["asset"]=new{version="2.0",generator="s&box Humanoid Rigger"},["scene"]=0,["scenes"]=new[]{new{nodes=roots}},["nodes"]=nodes,["meshes"]=meshes,["skins"]=new[]{new{joints=Enumerable.Range(0,rig.Bones.Length).ToArray(),inverseBindMatrices=inverseAccessor}},["accessors"]=accessors,["bufferViews"]=views,["buffers"]=new[]{buffer}};
         if(materialJson.Length>0)document["materials"]=materialJson;if(images.Count>0){document["images"]=images;document["textures"]=textures;}
-        if(materials.Any(m=>m.Unlit))document["extensionsUsed"]=new[]{"KHR_materials_unlit"};
+        var used=new List<string>();if(materials.Any(m=>m.Unlit))used.Add("KHR_materials_unlit");
+        if(materials.Any(m=>m.SpecularGlossiness is not null))used.Add("KHR_materials_pbrSpecularGlossiness");
+        if(used.Count>0)document["extensionsUsed"]=used;
         var json=JsonSerializer.SerializeToUtf8Bytes(document);
         if(!binary)return new(json,data);
         using var output=new MemoryStream();using var glb=new BinaryWriter(output);

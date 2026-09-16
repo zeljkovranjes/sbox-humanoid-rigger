@@ -47,7 +47,7 @@ public static class SkeletonSolver
         var rig=FitWithHandPrior(character,anatomy,profile);
         rig.Report=TorsoWeightRepair.Improve(character,rig,rig.Report);
         rig.Report=TrunkSkinning.Improve(character,rig,rig.Report);
-        return JointCoverage.Improve(character,rig);
+        return SeamWeightRepair.Improve(character,JointCoverage.Improve(character,rig));
     }
     static GeneratedRig FitWithHandPrior(ImportedCharacter character,Anatomy anatomy,RigProfile profile)
     {

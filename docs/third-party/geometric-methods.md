@@ -25,6 +25,13 @@ Repair neighborhoods follow mesh edges;
 nearby disconnected pieces are not joined. Coincident material-seam vertices
 share variables only when their original weights agree.
 
+A final seam pass also identifies matching, oppositely directed boundary edges
+split by UVs, hard normals or material parts. Unambiguous pairs of the same mesh
+kind receive common weights, followed by a complete pose-constrained refit and
+joint retest. Point-only contacts and nonmanifold edge matches are excluded.
+This changes skin weights only; mesh vertices, UVs, normals and material slots
+remain intact. An unresolved seam is reported as a validation error.
+
 The fitter first retains existing bone influences. If necessary it tries nearby
 articulation influences, and then adjacent spine influences that reduce redundant
 axial support within the profile's influence limit. These are private candidates:

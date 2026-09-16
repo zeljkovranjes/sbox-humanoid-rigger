@@ -58,6 +58,11 @@ public static class ObjExporter
             var m=materials[i];var color=m.ColorFactor??System.Numerics.Vector3.One;
             mtl.AppendLine("newmtl "+names[i]);mtl.AppendLine($"Kd {F(color.X)} {F(color.Y)} {F(color.Z)}");
             mtl.AppendLine("d "+F(m.OpacityFactor));mtl.AppendLine("illum 2");
+            if(m.AuthoredPbr||m.AuthoredEmission)
+            {
+                var emission=m.EmissiveFactor*m.EmissiveStrength;
+                mtl.AppendLine($"Ke {F(emission.X)} {F(emission.Y)} {F(emission.Z)}");
+            }
             foreach(var (key,path) in new[]{("map_Kd",m.ColorTexture),("norm",m.NormalTexture),("map_Pr",m.RoughnessTexture),("map_Pm",m.MetalnessTexture),("map_Ke",m.EmissiveTexture),("map_d",m.OpacityTexture)})
                 if(!string.IsNullOrEmpty(path))mtl.Append(key).Append(' ').AppendLine(path.Replace('\\','/'));
             mtl.AppendLine();

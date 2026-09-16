@@ -15,10 +15,14 @@ namespace HumanoidRigger;
 		public float RoughnessFactor { get; set; } = 1;
 		public float OpacityFactor { get; set; } = 1;
 		public System.Numerics.Vector3 EmissiveFactor { get; set; } = System.Numerics.Vector3.One;
+		public bool AuthoredEmission { get; set; }
+		public float EmissiveStrength { get; set; } = 1;
 		public string NormalTexture { get; set; }
+		public float NormalScale { get; set; } = 1;
 		public string RoughnessTexture { get; set; }
 		public string MetalnessTexture { get; set; }
 		public string OcclusionTexture { get; set; }
+		public float OcclusionStrength { get; set; } = 1;
 		public string EmissiveTexture { get; set; }
 		public string OpacityTexture { get; set; }
 		public bool AlphaTest { get; set; }

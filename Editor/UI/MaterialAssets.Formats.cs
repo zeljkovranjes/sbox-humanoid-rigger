@@ -26,6 +26,11 @@ internal static partial class MaterialAssets
         return source.Select((original,index)=>
         {
             var m=ConvertSpecularGlossiness(original with{},directory,index);
+            if(m.AuthoredPbr||m.AuthoredEmission)
+            {
+                float peak=Math.Max(1,Math.Max(m.EmissiveFactor.X,Math.Max(m.EmissiveFactor.Y,m.EmissiveFactor.Z)));
+                m.EmissiveFactor/=peak;m.EmissiveStrength*=peak;
+            }
             string WriteMap(string suffix,int width,int height,Func<int,int,SKColor> pixel)
             {
                 using var bitmap=new SKBitmap(width,height,SKColorType.Rgba8888,SKAlphaType.Unpremul);
@@ -45,6 +50,29 @@ internal static partial class MaterialAssets
                 int w=Math.Max(rough?.Width??1,metal?.Width??1),h=Math.Max(rough?.Height??1,metal?.Height??1);
                 m.MetallicRoughnessTexture=WriteMap("metallic_roughness",w,h,(x,y)=>new(255,Sample(rough,x,y,w,h,SKColors.White).Red,Sample(metal,x,y,w,h,SKColors.Black).Red));
             }
+            if(m.NormalTexture is not null&&m.NormalScale!=1)
+            {
+                using var normal=Decode(m.NormalTexture);float strength=m.NormalScale;
+                m.NormalTexture=WriteMap("normal",normal.Width,normal.Height,(x,y)=>
+                {
+                    var c=normal.GetPixel(x,y);
+                    var n=new System.Numerics.Vector3((c.Red/255f*2-1)*strength,(c.Green/255f*2-1)*strength,c.Blue/255f*2-1);
+                    n=n.LengthSquared()>1e-12f?System.Numerics.Vector3.Normalize(n):System.Numerics.Vector3.UnitZ;
+                    return new(Channel((n.X*.5f+.5f)*255),Channel((n.Y*.5f+.5f)*255),Channel((n.Z*.5f+.5f)*255),c.Alpha);
+                });
+                m.NormalScale=1;
+            }
+            if(m.AuthoredPbr&&m.OcclusionTexture is not null)
+            {
+                // glTF AO uses only R, even when roughness and metalness share
+                // the same image. Source 2 needs a separate grayscale input.
+                using var occlusion=Decode(m.OcclusionTexture);float strength=m.OcclusionStrength;
+                m.OcclusionTexture=WriteMap("occlusion",occlusion.Width,occlusion.Height,(x,y)=>
+                {byte v=Channel(255+strength*(occlusion.GetPixel(x,y).Red-255));return new(v,v,v);});
+                m.OcclusionStrength=1;
+            }
+            if((m.AuthoredPbr||m.AuthoredEmission)&&m.EmissiveTexture is null&&m.EmissiveFactor.LengthSquared()>0&&m.EmissiveStrength>0)
+                m.EmissiveTexture=WriteMap("emission",1,1,(x,y)=>SKColors.White);
             if(portable)
             {
                 if(m.OpacityTexture is not null)

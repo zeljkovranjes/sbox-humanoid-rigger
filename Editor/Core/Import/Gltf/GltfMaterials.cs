@@ -54,8 +54,13 @@ internal static class GltfMaterials
                 ColorTexture=Texture(Property(pbr,"baseColorTexture")),MetallicRoughnessTexture=Texture(Property(pbr,"metallicRoughnessTexture")),
                 MetallicFactor=Float(pbr,"metallicFactor",1),RoughnessFactor=Float(pbr,"roughnessFactor",1),
                 NormalTexture=Texture(Property(m,"normalTexture")),OcclusionTexture=Texture(Property(m,"occlusionTexture")),EmissiveTexture=Texture(Property(m,"emissiveTexture")),
+                NormalScale=Float(Property(m,"normalTexture"),"scale",1),OcclusionStrength=Float(Property(m,"occlusionTexture"),"strength",1),
                 EmissiveFactor=emissive.ValueKind==JsonValueKind.Array?new Vector3(emissive[0].GetSingle(),emissive[1].GetSingle(),emissive[2].GetSingle()):Vector3.Zero,
+                EmissiveStrength=Float(Property(Property(m,"extensions"),"KHR_materials_emissive_strength"),"emissiveStrength",1),
                 DoubleSided=m.TryGetProperty("doubleSided",out var two)&&two.GetBoolean(),AlphaTest=alpha=="MASK",Translucent=alpha=="BLEND",AlphaCutoff=Float(m,"alphaCutoff",.5f)};
+            if(!float.IsFinite(result.EmissiveStrength)||result.EmissiveStrength<0||!float.IsFinite(result.NormalScale)||
+                !float.IsFinite(result.OcclusionStrength)||result.OcclusionStrength<0||result.OcclusionStrength>1)
+                throw new FormatException($"Material '{result.Name}' has an invalid emission, normal or occlusion strength.");
             if(sg.ValueKind==JsonValueKind.Object)
             {
                 var diffuse=Property(sg,"diffuseFactor");var specular=Property(sg,"specularFactor");

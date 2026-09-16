@@ -13,6 +13,8 @@ internal static class FbxMaterialWriter
             var material=N("Material",ids[i],"Material::"+m.Name,"");var props=N("Properties70");
             var tint=m.ColorFactor??System.Numerics.Vector3.One;
             props.Children.AddRange([P("DiffuseColor","Color",(double)tint.X,(double)tint.Y,(double)tint.Z),P("DiffuseFactor","Number",1.0)]);
+            if(m.AuthoredPbr||m.AuthoredEmission)
+                props.Children.AddRange([P("EmissiveColor","Color",(double)m.EmissiveFactor.X,(double)m.EmissiveFactor.Y,(double)m.EmissiveFactor.Z),P("EmissiveFactor","Number",(double)m.EmissiveStrength)]);
             material.Children.AddRange([N("Version",102),N("ShadingModel","phong"),N("MultiLayer",0),props]);objects.Children.Add(material);
             foreach(var (channel,path) in new[]{("DiffuseColor",m.ColorTexture),("NormalMap",m.NormalTexture),("Roughness",m.RoughnessTexture),("Metalness",m.MetalnessTexture),("AmbientColor",m.OcclusionTexture),("EmissiveColor",m.EmissiveTexture),("TransparentColor",m.OpacityTexture)})
             {

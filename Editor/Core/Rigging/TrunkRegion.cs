@@ -37,9 +37,18 @@ internal sealed class TrunkRegion
             ("Neck","Head","Neck",1f)})
         {
             var a=Bone(start);var b=Bone(end);if(a is null||b is null||Vector3.Distance(a.Position,b.Position)<height*.005f)continue;
-            var axis=Vector3.Normalize(b.Position-a.Position);var origin=Vector3.Lerp(a.Position,b.Position,.3f);
-            var sections=MeshSections.Cut(surface,origin,axis,height*.15f,height*1e-5f)
-                .Where(s=>s.Radius>height*.002f&&s.Radius<height*.1f&&Vector3.Distance(s.Center,origin)<s.Radius*.6f).ToArray();
+            var axis=Vector3.Normalize(b.Position-a.Position);var origin=Vector3.Zero;
+            MeshSections.Section[] sections=[];
+            // A proximal arm plane can still intersect the torso or an open
+            // sleeve. Find a closed upper-arm contour before the elbow. Hip
+            // and neck attachment cuts retain their own established locations.
+            foreach(float fraction in start.StartsWith("UpperArm.")?new[]{.3f,.4f,.5f,.6f}:new[]{.3f})
+            {
+                origin=Vector3.Lerp(a.Position,b.Position,fraction);
+                sections=MeshSections.Cut(surface,origin,axis,height*.15f,height*1e-5f)
+                    .Where(s=>s.Radius>height*.002f&&s.Radius<height*.1f&&Vector3.Distance(s.Center,origin)<s.Radius*.6f).ToArray();
+                if(sections.Length>0)break;
+            }
             if(sections.Length==0)continue;
             var section=sections.OrderBy(s=>Vector3.Distance(s.Center,origin)).First();
             // Coincident body/clothing contours share a logical cut; source

@@ -14,6 +14,7 @@ internal static class ObjMaterials
             switch(words[0])
             {
                 case "Kd":if(words.Length>=4)current.ColorFactor=new Vector3(ObjImporter.Number(words[1]),ObjImporter.Number(words[2]),ObjImporter.Number(words[3]));break;
+                case "Ke":if(words.Length>=4){current.EmissiveFactor=new Vector3(ObjImporter.Number(words[1]),ObjImporter.Number(words[2]),ObjImporter.Number(words[3]));current.AuthoredEmission=true;}break;
                 case "d":case "Tr":
                     if(words.Length>=2){float alpha=ObjImporter.Number(words[^1]);current.OpacityFactor=Math.Clamp(words[0]=="Tr"?1-alpha:alpha,0,1);current.Translucent=current.OpacityFactor<.999f;}break;
                 case "map_Kd":current.ColorTexture=Texture();break;

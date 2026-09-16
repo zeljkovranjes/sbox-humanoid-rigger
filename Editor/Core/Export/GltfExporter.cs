@@ -91,7 +91,7 @@ public static class GltfExporter
             int meshIndex=meshes.Count;meshes.Add(new{name=part.Name,primitives});nodes.Add(new(){["name"]=part.Name,["mesh"]=meshIndex,["skin"]=0});
         }
         var images=new List<object>();var textures=new List<object>();var imageIds=new Dictionary<string,int>(StringComparer.OrdinalIgnoreCase);
-        object? Texture(string? path)
+        object? Texture(string? path,string? parameter=null,float value=1)
         {
             if(string.IsNullOrEmpty(path))return null;
             if(!imageIds.TryGetValue(path,out int id))
@@ -106,7 +106,9 @@ public static class GltfExporter
                 else images.Add(new{uri=UriPath(path)});
                 textures.Add(new{source=id});
             }
-            return new{index=id};
+            var info=new Dictionary<string,object>{{"index",id}};
+            if(parameter is not null&&value!=1)info[parameter]=value;
+            return info;
         }
         var materialJson=materials.Select(m=>
         {
@@ -118,6 +120,9 @@ public static class GltfExporter
             if(m.AlphaTest)result["alphaCutoff"]=m.AlphaCutoff;
             var extensions=new Dictionary<string,object>();
             if(m.Unlit)extensions["KHR_materials_unlit"]=new{};
+            var emission=m.AuthoredPbr||m.AuthoredEmission||m.EmissiveTexture is not null?m.EmissiveFactor:Vector3.Zero;
+            float peak=Math.Max(1,Math.Max(emission.X,Math.Max(emission.Y,emission.Z))),strength=m.EmissiveStrength*peak;
+            if(strength!=1)extensions["KHR_materials_emissive_strength"]=new{emissiveStrength=strength};
             if(m.SpecularGlossiness is {} sg)
             {
                 var properties=new Dictionary<string,object>{["diffuseFactor"]=new[]{sg.DiffuseFactor.X,sg.DiffuseFactor.Y,sg.DiffuseFactor.Z,sg.DiffuseFactor.W},
@@ -127,8 +132,10 @@ public static class GltfExporter
                 extensions["KHR_materials_pbrSpecularGlossiness"]=properties;
             }
             if(extensions.Count>0)result["extensions"]=extensions;
-            foreach(var (key,path) in new[]{("normalTexture",m.NormalTexture),("occlusionTexture",m.OcclusionTexture),("emissiveTexture",m.EmissiveTexture)})if(Texture(path) is {} info)result[key]=info;
-            var emission=m.AuthoredPbr||m.EmissiveTexture is not null?m.EmissiveFactor:Vector3.Zero;result["emissiveFactor"]=new[]{emission.X,emission.Y,emission.Z};return result;
+            if(Texture(m.NormalTexture,"scale",m.NormalScale) is {} normal)result["normalTexture"]=normal;
+            if(Texture(m.OcclusionTexture,"strength",m.OcclusionStrength) is {} occlusion)result["occlusionTexture"]=occlusion;
+            if(Texture(m.EmissiveTexture) is {} emissionMap)result["emissiveTexture"]=emissionMap;
+            result["emissiveFactor"]=new[]{emission.X/peak,emission.Y/peak,emission.Z/peak};return result;
         }).ToArray();
         var roots=Enumerable.Range(0,rig.Bones.Length).Where(i=>rig.Bones[i].Parent<0).Concat(Enumerable.Range(rig.Bones.Length,nodes.Count-rig.Bones.Length)).ToArray();
         byte[] data=stream.ToArray();var buffer=new Dictionary<string,object>{["byteLength"]=data.Length};if(!binary)buffer["uri"]=UriPath(bufferName);
@@ -136,6 +143,7 @@ public static class GltfExporter
         if(materialJson.Length>0)document["materials"]=materialJson;if(images.Count>0){document["images"]=images;document["textures"]=textures;}
         var used=new List<string>();if(materials.Any(m=>m.Unlit))used.Add("KHR_materials_unlit");
         if(materials.Any(m=>m.SpecularGlossiness is not null))used.Add("KHR_materials_pbrSpecularGlossiness");
+        if(materialJson.Any(m=>m.TryGetValue("extensions",out var e)&&((Dictionary<string,object>)e).ContainsKey("KHR_materials_emissive_strength")))used.Add("KHR_materials_emissive_strength");
         if(used.Count>0)document["extensionsUsed"]=used;
         var json=JsonSerializer.SerializeToUtf8Bytes(document);
         if(!binary)return new(json,data);

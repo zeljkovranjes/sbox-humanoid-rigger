@@ -16,7 +16,7 @@ internal sealed class GltfDocument
         var root=parsed.RootElement.Clone();
         if(!root.TryGetProperty("asset",out var asset)||asset.GetProperty("version").GetString()!="2.0")throw new FormatException("Use glTF 2.0 or GLB 2.0.");
         if(root.TryGetProperty("extensionsRequired",out var required))foreach(var extension in required.EnumerateArray())
-            if(extension.GetString() is not ("KHR_mesh_quantization" or "KHR_materials_unlit" or "KHR_texture_transform" or "KHR_materials_pbrSpecularGlossiness" or "EXT_texture_webp"))
+            if(extension.GetString() is not ("KHR_mesh_quantization" or "KHR_materials_unlit" or "KHR_texture_transform" or "KHR_materials_pbrSpecularGlossiness" or "KHR_materials_emissive_strength" or "EXT_texture_webp"))
                 throw new FormatException($"Required glTF extension '{extension.GetString()}' is unsupported. Export an uncompressed glTF/GLB with standard materials.");
         var buffers=ResolveBuffers(root,bin,resolver);
         if(buffers.Sum(b=>(long)b.Length)>ModelImporter.MaximumBytes)throw new FormatException("The glTF buffers exceed the 512 MB import limit.");

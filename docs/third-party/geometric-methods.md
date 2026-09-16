@@ -18,6 +18,11 @@ The C# implementation is independent; no Blender skinning source is included.
 Repairs retain mesh connectivity and must pass both the standard deformation
 poses and additional tests covering every deforming joint.
 
+If the initial upper-arm cross section intersects the torso or an open sleeve,
+the solver tries nearby sections farther along the upper arm. A valid closed
+contour restores the anatomical boundary used to keep arm weights off the trunk.
+This uses mesh geometry and joint positions, without model-specific rules.
+
 Residual deformation is repaired by fitting local weights against all applicable
 stress poses together. The fit penalizes signed surface-volume reversal, area
 collapse and excessive edge stretch with a bounded projected quasi-Newton solve.

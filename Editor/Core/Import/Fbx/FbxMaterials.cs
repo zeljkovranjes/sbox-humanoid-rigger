@@ -64,6 +64,14 @@ public static class FbxMaterials
 						Name = FbxNode.SplitName( rawName ).Name,
 						ColorFactor = FbxMaterialColor.Read( node ),
 					};
+					var emission=node.Child("Properties70")?.Children.FirstOrDefault(p=>p.Properties.FirstOrDefault() is "EmissiveColor");
+					if(emission?.Properties.Count>=7)
+					{
+						var factor=node.Child("Properties70")?.Children.FirstOrDefault(p=>p.Properties.FirstOrDefault() is "EmissiveFactor");
+						materials[id].AuthoredEmission=true;
+						materials[id].EmissiveFactor=new(emission.Prop<float>(4),emission.Prop<float>(5),emission.Prop<float>(6));
+						materials[id].EmissiveStrength=factor?.Properties.Count>=5?factor.Prop<float>(4):1;
+					}
 				}
 				else if ( node.Name is "Texture" or "Video" )
 				{

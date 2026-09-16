@@ -197,11 +197,11 @@ internal static partial class MaterialAssets
 				{
 					builder.AppendLine( "\tF_SELF_ILLUM 1" );
 					builder.AppendLine( $"\tTextureSelfIllumMask \"{emissive}\"" );
-					if(authored?.AuthoredPbr==true)
+					if(authored?.AuthoredPbr==true||authored?.AuthoredEmission==true)
 					{
 						var emission=authored.EmissiveFactor;
 						builder.AppendLine("\tg_flSelfIllumAlbedoFactor 0");
-						builder.AppendLine("\tg_flSelfIllumBrightness 1");
+						builder.AppendLine(FormattableString.Invariant($"\tg_flSelfIllumBrightness {authored.EmissiveStrength:R}"));
 						builder.AppendLine(FormattableString.Invariant($"\tg_vSelfIllumTint \"[{emission.X:R} {emission.Y:R} {emission.Z:R} 1]\""));
 					}
 				}

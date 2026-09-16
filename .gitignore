@@ -3,6 +3,7 @@
 .vs/
 .bin/
 /dev/
+/tests/
 *.user
 # Local automation and procedural fixtures are not part of the library.
 /Editor/UI/Automation.cs

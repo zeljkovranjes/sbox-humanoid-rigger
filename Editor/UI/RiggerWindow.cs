@@ -109,7 +109,11 @@ public sealed class RiggerWindow : Widget
         var top=toolbarContent.Layout;top.Margin=8;top.Spacing=8;
         top.Add(new Label(content){Text="Profile:"});
         var profile=top.Add(new ComboBox(content){MinimumWidth=190,ToolTip="The target skeleton’s bone names and hierarchy. Hand detection is independent of this choice."});
-        foreach(var p in Profiles.BuiltIn.Concat(ProfileStore.Load()))profile.AddItem(p.Name,"person",()=>{Session.SetProfile(p);Build();},selected:p.Id==Session.Profile.Id);
+        foreach(var p in Profiles.BuiltIn.Concat(ProfileStore.Load()))profile.AddItem(p.Name+(p.Id is "citizen" or "sbox-human"?" (Simplified)":""),"person",()=>{Session.SetProfile(p);Build();},selected:p.Id==Session.Profile.Id);
+        foreach(var reference in CitizenProfiles.References)profile.AddItem(reference.Name,"person",()=>
+        {
+            try{Session.SetProfile(CitizenProfiles.Load(reference.Path,reference.Name));Build();}catch(Exception e){Error(e);}
+        },selected:Session.Profile.Reference?.ModelPath==reference.Path);
         profile.AddItem("Create Custom Profile…","add",CreateProfile);
         profile.AddItem("Load Profile…","folder_open",LoadProfile);
         if(Session.Rig is not null)
@@ -128,6 +132,11 @@ public sealed class RiggerWindow : Widget
         if(framedCharacter!=Session.Character||framedStep!=Session.Step){viewport.Frame();framedCharacter=Session.Character;framedStep=Session.Step;}
         var bottom=footerContent.Layout;bottom.Margin=12;bottom.Spacing=8;
         status=bottom.Add(new Label(content){WordWrap=true,Text=Instruction()});
+        if(Session.Profile.Reference is {} referenceRig)
+        {
+            var notice=bottom.Add(new Label(content){Text=referenceRig.Compatibility(Session.Rig),WordWrap=true});
+            notice.SetStyles($"color: {Theme.Yellow.Hex};");
+        }
         if(Session.Step is WizardStep.Centerline or WizardStep.Body)
         {
             var importWarnings=Session.Character.ImportWarnings.Where(w=>!w.StartsWith("Detected a Z-up")).ToArray();
@@ -272,6 +281,11 @@ public sealed class RiggerWindow : Widget
             {
                 if(preparation is null||!Session.CanAccept(preparingDraft)||preparation.IsFaulted)StartPreparation();
                 result=await preparation.ConfigureAwait(false);await new EditorThread();
+            }
+            if(result.Rig?.Report.Passed==true&&result.Profile.Reference is not null)
+            {
+                status.Text="Validating reference constraints…";
+                result.AcceptNativeValidation(await NativeReferenceRig.Improve(result.Character!,result.Rig));await new EditorThread();
             }
             Session.AcceptContinuation(result);
             LastAdvanceWorkMilliseconds=System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;

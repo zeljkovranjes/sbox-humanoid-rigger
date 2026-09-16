@@ -17,9 +17,16 @@ internal sealed class ValidationGeometry
     internal List<int>[][] Touching=>touching.Value;
     internal IReadOnlyList<StressPose> Poses {get;}
     internal TrunkRegion? Trunk {get;}
-    internal ValidationGeometry(ImportedCharacter character,IReadOnlyList<StressPose>? poses=null,TrunkRegion? trunk=null)
+    internal Func<int,int,int,bool>? InfluenceAllowed {get;}
+    internal IReadOnlyDictionary<string,RigPoseSample>? SampledPoses {get;init;}
+    internal (Vector3[] Positions,System.Numerics.Quaternion[] Rotations) Transforms(GeneratedRig rig,StressPose pose)
+        =>SampledPoses?.TryGetValue(pose.Name,out var sample)==true?(sample.Positions,sample.Rotations):Deformation.BoneTransforms(rig,Deformation.JointRotations(rig,pose));
+    internal bool Allows(int part,int vertex,Vector3 point,Influence[] weights)=>Trunk?.Allows(part,vertex,point,weights)!=false&&
+        (InfluenceAllowed is null||weights.All(w=>w.Weight<=1e-6f||InfluenceAllowed(part,vertex,w.Bone)));
+    internal ValidationGeometry(ImportedCharacter character,IReadOnlyList<StressPose>? poses=null,TrunkRegion? trunk=null,Func<int,int,int,bool>? influenceAllowed=null)
     {
         Trunk=trunk;
+        InfluenceAllowed=influenceAllowed;
         Poses=poses??Deformation.Poses;
         Height=character.AnatomicalHeight;
         body=new(()=>character.Meshes.Where(m=>m.Kind==MeshKind.Body).SelectMany(m=>m.Vertices).ToArray());

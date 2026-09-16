@@ -21,7 +21,7 @@ internal static class PoseWeightFit
         double violationPenalty=prioritize?1000:0;
         var roles=rig.Bones.Select(b=>b.Role).ToHashSet();
         var specs=geometry.Poses.Where(p=>Deformation.IsApplicable(p,roles)).ToArray();
-        var transforms=specs.Select(p=>Deformation.BoneTransforms(rig,Deformation.JointRotations(rig,p))).ToArray();
+        var transforms=specs.Select(p=>geometry.Transforms(rig,p)).ToArray();
         var seeds=character.Meshes.Select(_=>new HashSet<int>()).ToArray();
         var support=character.Meshes.Select(_=>new Dictionary<int,Dictionary<int,float>>()).ToArray();
         var buffer=character.Meshes.Select(m=>new Vector3[m.Vertices.Length]).ToArray();
@@ -107,18 +107,20 @@ internal static class PoseWeightFit
                     int extra=desired.Key;
                     var proposed=weights.OrderByDescending(w=>w.Weight).Take(rig.Profile.MaximumInfluences-1).Append(new Influence(extra,.01f));
                     var replacement=Skinning.Cleanup(proposed,rig.Bones.Length,rig.Profile.MaximumInfluences);
-                    if(Vector3.Distance(point,Geometry.ClosestOnSegment(point,rig.Bones[extra].Position,ends[extra]))<=locality.Limit(extra,point)&&aliases.All(a=>geometry.Trunk?.Allows(a.Part,a.Index,point,replacement)!=false))weights=replacement;
+                    if(Vector3.Distance(point,Geometry.ClosestOnSegment(point,rig.Bones[extra].Position,ends[extra]))<=locality.Limit(extra,point)&&aliases.All(a=>geometry.Allows(a.Part,a.Index,point,replacement)))weights=replacement;
                 }
                 if(expandSupport&&editable[p].Contains(v))
                 {
                     var retained=weights.Select(w=>w.Bone).ToHashSet();
                     var extra=aliases.SelectMany(a=>geometry.Neighbors[a.Part][a.Index].SelectMany(n=>rig.Weights[a.Part][n])).Where(w=>!retained.Contains(w.Bone))
                         .GroupBy(w=>w.Bone).OrderByDescending(g=>g.Sum(w=>w.Weight)).ThenBy(g=>g.Key)
-                        .Where(g=>Vector3.Distance(point,Geometry.ClosestOnSegment(point,rig.Bones[g.Key].Position,ends[g.Key]))<=locality.Limit(g.Key,point))
+                        .Where(g=>Vector3.Distance(point,Geometry.ClosestOnSegment(point,rig.Bones[g.Key].Position,ends[g.Key]))<=locality.Limit(g.Key,point)&&aliases.All(a=>geometry.InfluenceAllowed?.Invoke(a.Part,a.Index,g.Key)!=false))
                         .Take(4).Select(g=>new Influence(g.Key,0));
                     weights=weights.Concat(extra).ToArray();
                 }
                 var caps=weights.Select(w=>Vector3.Distance(point,Geometry.ClosestOnSegment(point,rig.Bones[w.Bone].Position,ends[w.Bone]))>locality.Limit(w.Bone,point)?Math.Max(w.Weight,.05):1d).ToArray();
+                if(geometry.InfluenceAllowed is not null)for(int i=0;i<weights.Length;i++)
+                    if(aliases.Any(a=>!geometry.InfluenceAllowed(a.Part,a.Index,weights[i].Bone)))caps[i]=0;
                 if(geometry.Trunk is {} trunk&&aliases.Any(a=>trunk.Vertices[a.Part][a.Index]))for(int i=0;i<weights.Length;i++)
                     if(trunk.Attachments.Any(a=>a.Support(point)==0&&a.Moving[weights[i].Bone]))caps[i]=weights[i].Weight;
                 indices[p][v]=vertices.Count;groupIndices[group]=vertices.Count;

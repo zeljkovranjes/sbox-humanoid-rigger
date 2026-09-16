@@ -19,6 +19,14 @@ internal static class TrunkSkinning
             {
                 rig.Weights=Apply(character,rig,region,original,heat,amount);
                 var candidate=RigValidator.ValidateAndRepair(character,rig,geometry);
+                // Restricting a socket can expose a fold at its boundary. Fit
+                // that transition across poses without reopening trunk ownership.
+                if(WeightRepair.HasCompleteEvidence(candidate,expected)&&(!candidate.Passed||candidate.StressTests.Zip(initial.StressTests).Any(p=>p.First.ReversedTriangles>p.Second.ReversedTriangles)))
+                {
+                    var trial=new GeneratedRig{Profile=rig.Profile,Bones=rig.Bones,Anatomy=rig.Anatomy,Weights=rig.Weights,Report=candidate};
+                    var refined=PoseWeightRepair.Improve(character,trial,geometry,JointCoverage.Measure(character,trial,geometry));
+                    rig.Weights=refined.Weights;candidate=refined.Report;
+                }
                 // Local surface repair may adjust a protected boundary. Never
                 // accept a trial that silently reintroduces remote attachments.
                 if(region.HasBleeding(character,rig)||!candidate.Passed||!WeightRepair.HasCompleteEvidence(candidate,expected)||

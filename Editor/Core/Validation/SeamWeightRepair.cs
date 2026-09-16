@@ -1,16 +1,17 @@
+#nullable enable annotations
 namespace HumanoidRigger;
 
 /// <summary>Close authored surface seams, then refit their neighborhoods against every pose.
 /// Equal weights at equal positions guarantee seam closure for arbitrary bone motion.</summary>
 internal static class SeamWeightRepair
 {
-    internal static GeneratedRig Improve(ImportedCharacter character,GeneratedRig rig)
+    internal static GeneratedRig Improve(ImportedCharacter character,GeneratedRig rig,ValidationGeometry? geometry=null)
     {
         if(!rig.Report.Passed)return rig;
         var seams=new SurfaceSeams(character);int gaps=seams.Mismatches(rig.Weights);
         if(gaps==0)return rig;
         var candidate=new GeneratedRig{Profile=rig.Profile,Bones=rig.Bones,Anatomy=rig.Anatomy,Weights=seams.Couple(rig)};
-        var geometry=new ValidationGeometry(character);
+        geometry??=new ValidationGeometry(character);
         candidate.Report=RigValidator.Validate(character,candidate,null,geometry);
         var checks=JointCoverage.Measure(character,candidate,geometry);
         candidate=PoseWeightRepair.Improve(character,candidate,geometry,checks);

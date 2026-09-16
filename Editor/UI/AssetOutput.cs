@@ -16,6 +16,11 @@ public static class AssetOutput
     public static async Task<ExportResult> Save(Wizard session,ExportRequest request)
     {
         if(session.Rig?.Report.Passed!=true)throw new InvalidOperationException("The rig must pass validation before saving.");
+        if(session.Profile.Reference is not null&&session.Rig.Report.NativeStressTests.Count==0)
+        {
+            session.AcceptNativeValidation(await NativeReferenceRig.Improve(session.Character!,session.Rig));await new EditorThread();
+            if(!session.Rig.Report.Passed)throw new InvalidOperationException("The reference rig did not pass native deformation validation.");
+        }
         var character=session.Character!;var rig=session.Rig;
         if(request.Formats.HasFlag(ExportFormats.Vmdl))VmdlBoneNames.Validate(rig.Bones);
         var root=Project.Current.GetAssetsPath();var plan=request.Plan(root,character.Materials.Length>0);plan.EnsureAvailable();

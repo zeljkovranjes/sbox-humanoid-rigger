@@ -1,5 +1,7 @@
 # Model formats
 
+The ModelDoc KV3 reader/writer is reused from Humanoid Retargeter's `Target/Kv3.cs`. Complete Citizen profiles read the user's installed Facepunch skeletons, skin-cluster membership and ModelDoc rig configuration; no Citizen assets or fixed armature lists are redistributed. Native constraint sampling uses s&box's own evaluator. Generated meshes, textures and materials remain independent of the reference model.
+
 The glTF container, accessor and mesh transform readers adapt the corresponding C# code from [Humanoid Retargeter](https://github.com/zeljkovranjes/humanoid-retargeter): `GltfDocument.cs` and `GltfModelDmxWriter.cs`. They produce the rigger's canonical character data and use the existing anatomical solver.
 
 Import/export conventions follow the [glTF 2.0 specification](https://github.com/KhronosGroup/glTF/tree/main/specification/2.0): metres, Y up, inverse bind matrices, sparse accessors and packed metallic/roughness textures. Native material preparation retains the retargeter's texture matching and material compilation code.

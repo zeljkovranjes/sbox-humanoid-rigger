@@ -13,6 +13,7 @@ public sealed class RigProfile
     public CharacterPose RestPose { get; init; }=CharacterPose.TPose;
     public int MaximumInfluences { get; init; }=4;
     public BoneDefinition[] Bones { get; init; }=[];
+    public ReferenceArmature? Reference { get; init; }
     public Dictionary<string,string[]> Aliases { get; init; }=new();
     public Dictionary<string,string> Metadata { get; init; }=new();
     public void Validate()
@@ -28,11 +29,12 @@ public sealed class RigProfile
             if(b.Parent==b.Role || !float.IsFinite(b.Roll) || b.AimAxis is not ("X" or "Y" or "Z")) throw new FormatException("Invalid bone frame.");
             if(b.Placement is {} placement && (!float.IsFinite(placement.Fraction)||placement.Fraction<0||placement.Fraction>1))throw new FormatException("Invalid helper bone placement.");
         }
-        if(Bones.Count(b=>b.Parent is null)!=1) throw new FormatException("A profile needs exactly one root.");
+        if(Reference is null && Bones.Count(b=>b.Parent is null)!=1) throw new FormatException("A profile needs exactly one root.");
+        Reference?.Validate(Bones);
         foreach(var b in Bones)if(b.Placement is {} placement && (!roles.Contains(placement.StartRole)||!roles.Contains(placement.EndRole)))throw new FormatException("Unknown helper bone anchor.");
     }
-    public string ToJson() { Validate(); return JsonSerializer.Serialize(this,new JsonSerializerOptions{WriteIndented=true}); }
-    public static RigProfile FromJson(string json) { var p=JsonSerializer.Deserialize<RigProfile>(json) ?? throw new FormatException("Empty profile."); p.Validate();return p; }
+    public string ToJson() { Validate(); return JsonSerializer.Serialize(this,new JsonSerializerOptions{WriteIndented=true,IncludeFields=true}); }
+    public static RigProfile FromJson(string json) { var p=JsonSerializer.Deserialize<RigProfile>(json,new JsonSerializerOptions{IncludeFields=true}) ?? throw new FormatException("Empty profile."); p.Validate();return p; }
 }
 
 public static class Profiles

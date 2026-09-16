@@ -40,8 +40,10 @@ public static class SurfaceRepair
         var faces=geometry.Faces;var neighbors=geometry.Neighbors;var touching=geometry.Touching;
         var poses=specifications.Select((spec,i)=>
         {
-            var transforms=Deformation.BoneTransforms(rig,Deformation.JointRotations(rig,spec));
-            var pose=new Pose(initial.StressTests[i],Deformation.Pose(character,rig,spec),transforms.Positions,transforms.Rotations,[]);
+            var transforms=geometry.Transforms(rig,spec);
+            var points=character.Meshes.Select(m=>new Vector3[m.Vertices.Length]).ToArray();
+            Deformation.ApplyTransforms(character,rig,transforms.Positions,transforms.Rotations,points);
+            var pose=new Pose(initial.StressTests[i],points,transforms.Positions,transforms.Rotations,[]);
             for(int p=0;p<faces.Length;p++)for(int t=0;t<faces[p].Length;t++)
             {
                 var f=faces[p][t];if(f.Area<=minimumArea)continue;
@@ -269,7 +271,7 @@ public static class SurfaceRepair
     static bool TryCandidate(ImportedCharacter character,GeneratedRig rig,Pose[] poses,Face[] faces,int[] triangles,HashSet<int> region,int part,Influence[][] candidate,float minimumArea,float height,ValidationGeometry geometry,out double gain,bool commit=true)
     {
         gain=0;
-        if(geometry.Trunk is not null&&region.Any(v=>!geometry.Trunk.Allows(part,v,character.Meshes[part].Vertices[v],candidate[v])))return false;
+        if(region.Any(v=>!geometry.Allows(part,v,character.Meshes[part].Vertices[v],candidate[v])))return false;
         var vertices=region.ToArray();
         // Most trials move one vertex or an edge. Reuse a compact buffer while
         // scoring instead of allocating a dictionary and set for every pose.

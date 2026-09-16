@@ -24,7 +24,7 @@ sealed class JointPanel : Widget
     }
     public void Reload()
     {
-        var roles=(wizard.Rig is null?viewport.EditablePoints().Select(p=>p.Role):wizard.Rig.Bones.Where(b=>b.Deform).Select(b=>b.Role)).ToArray();
+        var roles=(wizard.Rig is null?viewport.EditablePoints().Select(p=>p.Role):wizard.Rig.Bones.Where((b,i)=>RigGeometry.CanPose(wizard.Rig,i)).Select(b=>b.Role)).ToArray();
         if(rows.Select(r=>r.Role).SequenceEqual(roles)&&scroll.Canvas.IsValid())
         {
             // Native rows outlive hot reloads; refresh their callbacks while retaining selection and scroll.
@@ -57,6 +57,7 @@ sealed class JointPanel : Widget
         }
         public static string Title(string role)
         {
+            if(role.StartsWith("Reference:"))return role[10..];
             string side=role.EndsWith(".L")?"Left ":role.EndsWith(".R")?"Right ":"";
             string name=side.Length>0?role[..^2]:role;
             name=name switch{"UpperArm"=>"Shoulder","LowerArm"=>"Elbow","Hand"=>"Wrist","UpperLeg"=>"Hip","LowerLeg"=>"Knee","Foot"=>"Ankle",_=>name};

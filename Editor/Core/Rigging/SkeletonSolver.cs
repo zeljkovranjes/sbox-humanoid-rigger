@@ -15,6 +15,8 @@ public sealed class GeneratedRig
 }
 public static class RigGeometry
 {
+    public static bool CanPose(GeneratedRig rig,int index)=>rig.Bones[index].Deform||
+        rig.Profile.Reference is not null&&rig.Bones[index].Role!="Root"&&!rig.Bones[index].Role.StartsWith("Reference:")&&rig.Anatomy?.Points.ContainsKey(rig.Bones[index].Role)==true;
     internal static Vector3? AnatomicalEnd(Anatomy? anatomy,string role)
     {
         if(anatomy is null)return null;
@@ -27,9 +29,18 @@ public static class RigGeometry
         return null;
     }
     /// <summary>Skinning segments follow anatomy, independent of profile child ordering.</summary>
-    public static Vector3[] SegmentEnds(GeneratedRig rig)=>rig.Bones.Select((bone,index)=>
+    public static Vector3[] SegmentEnds(GeneratedRig rig)
+    {
+        var canonical=rig.Profile.Reference is null?null:Profiles.CanonicalBones().ToLookup(b=>b.Parent);
+        return rig.Bones.Select((bone,index)=>
     {
         var children=rig.Bones.Where(b=>b.Parent==index&&b.Deform).ToArray();
+        if(rig.Profile.Reference is not null&&!bone.Role.StartsWith("Reference:"))
+        {
+            // Reference helpers can precede the anatomical child or sit between
+            // a palm and its knuckles. Neither changes the skinning segment.
+            children=canonical![bone.Role].Select(d=>rig.Bones.FirstOrDefault(b=>b.Role==d.Role)).Where(b=>b is not null).ToArray()!;
+        }
         if(children.Length==0&&AnatomicalEnd(rig.Anatomy,bone.Role) is {} terminal)return terminal;
         if(bone.Role.StartsWith("Hand."))
         {
@@ -39,6 +50,7 @@ public static class RigGeometry
         }
         return children.FirstOrDefault()?.Position??bone.Position;
     }).ToArray();
+    }
 }
 public static class SkeletonSolver
 {
@@ -47,7 +59,10 @@ public static class SkeletonSolver
         var rig=FitWithHandPrior(character,anatomy,profile);
         rig.Report=TorsoWeightRepair.Improve(character,rig,rig.Report);
         rig.Report=TrunkSkinning.Improve(character,rig,rig.Report);
-        return SeamWeightRepair.Improve(character,JointCoverage.Improve(character,rig));
+        // Establish cranial ownership before seam fitting. Otherwise that fit
+        // can spend its correction budget accommodating erroneous face weights.
+        var cranial=HeadWeightRepair.Improve(character,rig);
+        return ReferenceEquals(cranial,rig)?SeamWeightRepair.Improve(character,JointCoverage.Improve(character,rig)):cranial;
     }
     static GeneratedRig FitWithHandPrior(ImportedCharacter character,Anatomy anatomy,RigProfile profile)
     {
@@ -84,6 +99,7 @@ public static class SkeletonSolver
     }
     static GeneratedRig CreateSkeleton(Anatomy anatomy,RigProfile profile)
     {
+        if(profile.Reference is not null){profile.Validate();return ReferenceFitting.Create(anatomy,profile);}
         profile.Validate();var bones=new List<RigBone>();var ids=new Dictionary<string,int>();
         foreach(var definition in profile.Bones)
         {

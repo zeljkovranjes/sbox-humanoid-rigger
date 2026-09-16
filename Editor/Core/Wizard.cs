@@ -38,6 +38,12 @@ public sealed class Wizard
         if(!CanAccept(prepared)||prepared.Revision!=prepared.preparedFromRevision+1)throw new InvalidOperationException("Prepared rigging results are out of date.");
         Anatomy=prepared.Anatomy;Rig=prepared.Rig;Step=prepared.Step;centerlineChanged=prepared.centerlineChanged;Revision++;
     }
+    public void AcceptNativeValidation(GeneratedRig rig)
+    {
+        if(Rig is null||Rig.Profile.Reference is null||rig.Profile!=Profile||!rig.Bones.SequenceEqual(Rig.Bones)||rig.Anatomy!=Rig.Anatomy)
+            throw new InvalidOperationException("Native validation does not match this generated rig.");
+        Rig=rig;Step=rig.Report.Passed?WizardStep.Finish:WizardStep.Validation;
+    }
     public void Import(string path)=>Load(ModelImporter.Import(path));
     public void Load(ImportedCharacter model)
     {

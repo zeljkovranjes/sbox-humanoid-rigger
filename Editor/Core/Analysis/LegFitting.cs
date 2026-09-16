@@ -64,6 +64,7 @@ internal static class LegFitting
         }
         HipFitting.Refine(anatomy,sections,h,volume);
         HipFitting.RaiseLowHips(anatomy,sections,h,volume);
+        HipFitting.RefineDetached(anatomy,sections,h,volume);
     }
     static void PreserveSymmetricHipHeight(ImportedCharacter character,Anatomy anatomy,float h,SurfaceVisibility volume)
     {

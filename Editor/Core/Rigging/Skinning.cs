@@ -56,7 +56,7 @@ public static class Skinning
                 distances[v]=new float[bones.Length];nearest[v]=float.PositiveInfinity;
                 for(int b=0;b<bones.Length;b++)
                 {
-                    var p=mesh.Vertices[v];var role=bones[b].Role;
+                    var p=mesh.Vertices[v];var role=ReferenceFitting.Owner(rig,b);
                     var distance=!bones[b].Deform || !SkinRegions.Allows(digits[v],role) || role.EndsWith(".L")&&p.X<pelvis.X-height*.025f || role.EndsWith(".R")&&p.X>pelvis.X+height*.025f
                         ?float.PositiveInfinity:Vector3.Distance(p,Geometry.ClosestOnSegment(p,bones[b].Position,ends[b]));
                     if(float.IsFinite(distance) && volume.InteriorCells>0)

@@ -10,20 +10,22 @@ public static class HandDetector
         if(side is not ("L" or "R"))throw new ArgumentException("Unknown hand side.");
         if(expectedCount is <0 or >5)throw new ArgumentOutOfRangeException(nameof(expectedCount));
         var corrected=anatomy.Points.Values.Where(p=>p.Corrected&&p.Role.EndsWith("."+side)&&Profiles.Fingers.Any(p.Role.StartsWith)).ToArray();
+        bool sparseCaps=false;
         try
         {
             var forearm=anatomy["Hand."+side]-anatomy["LowerArm."+side];
             // A lowered hand's spherical neighborhood overlaps the hip/torso.
             // Follow the wrist's surface connectivity before looking for digits.
             bool lowered=forearm.LengthSquared()>0&&Vector3.Normalize(forearm).Y<-.82f;
-            DetectGeometry(character,anatomy,side,diagnostic,lowered);
+            sparseCaps=DetectGeometry(character,anatomy,side,diagnostic,lowered);
             int found=Profiles.Fingers.Count(f=>anatomy.Points.ContainsKey(f+"Tip."+side));
             if(expectedCount is {} requested?found<requested:found is >0 and <5)
             {
-                var candidate=anatomy.Copy();DetectGeometry(character,candidate,side,diagnostic,true);
+                var candidate=anatomy.Copy();bool candidateCaps=DetectGeometry(character,candidate,side,diagnostic,true);
                 int recovered=Profiles.Fingers.Count(f=>candidate.Points.ContainsKey(f+"Tip."+side));
                 if(recovered>found&&(expectedCount is not null||PreservesExtrema(character,anatomy,candidate,side)))
                 {
+                    sparseCaps=candidateCaps;
                     foreach(var key in anatomy.Points.Keys.Where(k=>k.EndsWith("."+side)&&Profiles.Fingers.Any(k.StartsWith)).ToArray())anatomy.Points.Remove(key);
                     foreach(var p in candidate.Points.Values.Where(p=>p.Role.EndsWith("."+side)&&Profiles.Fingers.Any(p.Role.StartsWith)))anatomy.Points[p.Role]=p;
                     if(candidate.Hands.TryGetValue(side,out var frame))anatomy.Hands[side]=frame;
@@ -36,6 +38,7 @@ public static class HandDetector
         finally{foreach(var point in corrected)if(expectedCount is null||anatomy.Points.ContainsKey(point.Role))anatomy.Points[point.Role]=point;}
         ThumbFitting.Refine(character,anatomy,side);
         FingerAlignment.Refine(character,anatomy,side);
+        if(sparseCaps)SparseFingerFitting.Refine(character,anatomy,side);
     }
     static bool PreservesExtrema(ImportedCharacter character,Anatomy original,Anatomy candidate,string side)
     {
@@ -56,7 +59,7 @@ public static class HandDetector
         var triangles=new SurfaceVisibility(character.Meshes.Where(m=>m.Kind==MeshKind.Body));
         return sparse.All(t=>triangles.NearSurface(t.Position,original.Height*.008f));
     }
-    static void DetectGeometry(ImportedCharacter character,Anatomy anatomy,string side,Action<string>? diagnostic,bool isolate=false)
+    static bool DetectGeometry(ImportedCharacter character,Anatomy anatomy,string side,Action<string>? diagnostic,bool isolate=false)
     {
         anatomy.Hands.Remove(side);
         anatomy.HandEnds.Remove(side);
@@ -87,7 +90,7 @@ public static class HandDetector
         }
         var parts=new[]{(Mesh:surface,Neighbors:neighbors)};
         var vertices=surface.Vertices.Where((p,i)=>region[i]&&Vector3.Dot(p-wrist,axis)>-height*.025f&&Vector3.Distance(p,wrist)<cropRadius).ToArray();
-        if(vertices.Length<12){anatomy.Warnings.Add($"{side} hand has insufficient geometry for finger reconstruction.");return;}
+        if(vertices.Length<12){anatomy.Warnings.Add($"{side} hand has insufficient geometry for finger reconstruction.");return false;}
         // Estimate palm spread in the plane perpendicular to the forearm. A
         // fixed world axis confuses palm-down hands with edge-on hands.
         var perpendicular=Vector3.Normalize(Vector3.Cross(axis,across));
@@ -104,6 +107,7 @@ public static class HandDetector
         diagnostic?.Invoke($"{side}: wrist {wrist}, axis {axis}, across {across}, reach {reach}");
         List<List<Vector3>> best=[];float bestScore=float.NegativeInfinity;
         var pooled=new List<List<Vector3>>();
+        SurfaceVisibility? sparseVolume=null;
         foreach(float fraction in isolate?Enumerable.Range(6,33).Reverse().Select(i=>i*.025f):new[]{.9f,.85f,.8f,.7f,.6f,.5f,.4f,.3f,.2f,.15f})
         {
             var branches=new List<List<Vector3>>();
@@ -120,7 +124,7 @@ public static class HandDetector
                         points.Add(part.Mesh.Vertices[current]);
                         foreach(var n in part.Neighbors[current])if(!seen[n]&&Allowed(n)){seen[n]=true;queue.Enqueue(n);}
                     }
-                    if(points.Count<8)continue;
+                    if(points.Count<(isolate?4:8))continue;
                     var branchCenter=Geometry.Mean(points);
                     float wristDistance=Vector3.Distance(branchCenter,reviewedWrist);
                     bool leg= new[]{"L","R"}.Any(s=>Vector3.Distance(branchCenter,Geometry.ClosestOnSegment(branchCenter,anatomy["LowerLeg."+s],anatomy["Foot."+s]))<wristDistance*.65f);
@@ -128,7 +132,24 @@ public static class HandDetector
                     float width=points.Max(p=>Vector3.Dot(p-wrist,across))-points.Min(p=>Vector3.Dot(p-wrist,across));
                     float length=points.Max(p=>Vector3.Dot(p-wrist,axis))-points.Min(p=>Vector3.Dot(p-wrist,axis));
                     diagnostic?.Invoke($"cut {fraction}: count {points.Count}, width {width}, length {length}, tip {Tip(points,wrist,axis)}");
-                    if(width<height*.035f&&length>height*.008f&&length>width*(isolate?.35f:.55f))branches.Add(points);
+                    bool sparseCap=false;
+                    // A rounded cap has some depth; an almost planar unused
+                    // palm rim is not evidence of an additional finger.
+                    if(isolate&&points.Count>=4&&points.Count<8&&width>height*.003f&&width<height*.025f&&length>width*.05f&&fraction>.5f)
+                    {
+                        // A low-poly fingertip can have only its terminal ring
+                        // beyond the cut. Require a real solid finger behind it
+                        // instead of treating vertex count as anatomical evidence.
+                        var normal=Vector3.Normalize(Vector3.Cross(axis,across));
+                        float thickness=points.Max(p=>Vector3.Dot(p,normal))-points.Min(p=>Vector3.Dot(p,normal));
+                        if(thickness>height*.002f&&thickness<width*2)
+                        {
+                            sparseVolume??=new SurfaceVisibility(character.Meshes.Where(m=>m.Kind==MeshKind.Body));
+                            var tipCenter=Geometry.Mean(points);
+                            sparseCap=Enumerable.Range(1,4).All(i=>sparseVolume.Contains(tipCenter-axis*(width*i*.5f),height*1e-5f));
+                        }
+                    }
+                    if(width<height*.035f&&(length>height*.008f&&length>width*(isolate?.35f:.55f)||sparseCap))branches.Add(points);
                 }
             }
             foreach(var branch in branches)
@@ -157,14 +178,15 @@ public static class HandDetector
             if(score>bestScore){bestScore=score;best=branches;}
         }
         if(pooled.Count is >=1 and <=5 && pooled.Count>best.Count)best=pooled;
-        if(best.Count==0){anatomy.Warnings.Add($"{side} fingers are not separated; palm-only skinning will be used.");return;}
+        diagnostic?.Invoke($"{side}: selected {best.Count} branches, pooled {pooled.Count}, sizes {string.Join(",",best.Select(b=>b.Count))}");
+        if(best.Count==0){anatomy.Warnings.Add($"{side} fingers are not separated; palm-only skinning will be used.");return false;}
         if(best.Count==1)
         {
             var branch=best[0];var tip=Tip(branch,wrist,axis);
             var start=Geometry.Mean(branch.OrderBy(p=>Vector3.Dot(p-wrist,axis)).Take(Math.Max(4,branch.Count/8)));
             // One isolated digit has no sibling ordering. Use the primary digit role rather than inventing a thumb and fingers.
             PlaceChain("Index",side,start,tip,vertices,height,anatomy);
-            anatomy.Warnings.Add($"{side} hand has one detected finger branch; check its assignment.");return;
+            anatomy.Warnings.Add($"{side} hand has one detected finger branch; check its assignment.");return false;
         }
         var ordered=best.OrderBy(b=>Vector3.Dot(Geometry.Mean(b)-wrist,across)).ToArray();
         // The body detector's wrist can be biased toward the thumb web. Use
@@ -204,6 +226,7 @@ public static class HandDetector
             PlaceChain(names[i],side,basePoint,tip,vertices,height,anatomy);
         }
         if(best.Count<5)anatomy.Warnings.Add($"{side} hand has {best.Count} detected finger branches; check their assignments.");
+        return best.Any(b=>b.Count<8);
     }
     internal static bool[] ReachableHand(MeshPart mesh,List<int>[] neighbors,Vector3 wrist,float height)
     {

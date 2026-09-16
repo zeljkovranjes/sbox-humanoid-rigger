@@ -64,7 +64,8 @@ public static class HeatSkinning
             for(int b=0;b<rig.Bones.Length;b++)
             {
                 var bone=rig.Bones[b];
-                if(!bone.Deform||!SkinRegions.Allows(ownership[v],bone.Role)||bone.Role.EndsWith(".L")&&points[v].X<center-height*.025f||bone.Role.EndsWith(".R")&&points[v].X>center+height*.025f)continue;
+                string role=ReferenceFitting.Owner(rig,b);
+                if(!bone.Deform||!SkinRegions.Allows(ownership[v],role)||role.EndsWith(".L")&&points[v].X<center-height*.025f||role.EndsWith(".R")&&points[v].X>center+height*.025f)continue;
                 if(Profiles.Fingers.Any(f=>bone.Role.StartsWith(f))&&handNodes.TryGetValue(bone.Role[^1..],out var hand)&&!hand[v])continue;
                 float support=1;
                 if(trunkNodes[v])foreach(var attachment in trunk!.Attachments)if(attachment.Moving[b])support=Math.Min(support,attachment.Support(points[v]));

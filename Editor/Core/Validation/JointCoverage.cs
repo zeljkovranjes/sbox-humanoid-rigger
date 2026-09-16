@@ -1,3 +1,4 @@
+#nullable enable annotations
 namespace HumanoidRigger;
 using Vector3=System.Numerics.Vector3;
 
@@ -11,7 +12,7 @@ internal static class JointCoverage
         var buffer=character.Meshes.Select(m=>new Vector3[m.Vertices.Length]).ToArray();
         for(int joint=0;joint<rig.Bones.Length;joint++)
         {
-            if(!rig.Bones[joint].Deform)continue;
+            if(!RigGeometry.CanPose(rig,joint))continue;
             var moving=new bool[rig.Bones.Length];moving[joint]=true;
             for(int b=joint+1;b<moving.Length;b++)moving[b]=rig.Bones[b].Parent>=0&&moving[rig.Bones[b].Parent];
             var touched=rig.Weights.Select(p=>p.Select(w=>w.Any(i=>moving[i.Bone])).ToArray()).ToArray();
@@ -26,10 +27,10 @@ internal static class JointCoverage
     }
     static bool Bad(StressResult result)=>result.ReversedTriangles>0||result.NonFiniteVertices>0||result.NonFiniteMeasurements>0||result.MaximumStretch>4||result.MinimumAreaRatio<.025f;
     static double Score(IEnumerable<StressResult> results)=>results.Sum(r=>r.ReversedTriangles+1000000d*(r.NonFiniteVertices+r.NonFiniteMeasurements)+100*Math.Max(0,r.MaximumStretch/4-1)+100*Math.Max(0,1-r.MinimumAreaRatio/.025f));
-    internal static GeneratedRig Improve(ImportedCharacter character,GeneratedRig rig)
+    internal static GeneratedRig Improve(ImportedCharacter character,GeneratedRig rig,ValidationGeometry? geometry=null)
     {
         if(!rig.Report.Passed)return rig;
-        var geometry=new ValidationGeometry(character);var checks=Measure(character,rig,geometry);
+        geometry??=new ValidationGeometry(character);var checks=Measure(character,rig,geometry);
         if(checks.Any(c=>Bad(c.Result)))
         {
             var repaired=PoseWeightRepair.Improve(character,rig,geometry,checks);
@@ -45,7 +46,7 @@ internal static class JointCoverage
             // Retain previously discovered failures after they are repaired.
             // Otherwise a spine correction can undo the adjacent chest repair.
             foreach(var pose in failed)constraints.TryAdd(pose.Name,pose);
-            var scope=new ValidationGeometry(character,Deformation.Poses.Concat(constraints.Values).ToArray(),trunk);
+            var scope=new ValidationGeometry(character,Deformation.Poses.Concat(constraints.Values).ToArray(),trunk,geometry.InfluenceAllowed);
             var candidate=new GeneratedRig{Profile=rig.Profile,Bones=rig.Bones,Anatomy=rig.Anatomy,Weights=rig.Weights.Select(p=>(Influence[][])p.Clone()).ToArray()};
             candidate.Report=RigValidator.ValidateAndRepair(character,candidate,scope);
             candidate=JointWeightRepair.Improve(character,candidate,scope);
@@ -84,7 +85,7 @@ internal static class JointCoverage
                     if(support<.001f)continue;
                     var weights=Skinning.Cleanup(rig.Weights[p][v].Select(w=>w with{Weight=w.Weight*(1-support)})
                         .Concat(source[p][v].Select(w=>w with{Weight=w.Weight*support})),rig.Bones.Length,rig.Profile.MaximumInfluences);
-                    if(geometry.Trunk?.Allows(p,v,character.Meshes[p].Vertices[v],weights)==false)continue;
+                    if(!geometry.Allows(p,v,character.Meshes[p].Vertices[v],weights))continue;
                     proposed[p][v]=weights;
                 }
                 rig.Report=SurfaceRepair.TryWeights(character,rig,rig.Report,proposed,geometry);

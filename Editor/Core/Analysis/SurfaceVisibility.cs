@@ -17,7 +17,15 @@ public sealed class SurfaceVisibility
     readonly Node root;
     public SurfaceVisibility(IEnumerable<MeshPart> meshes,float tolerance=0)
     {
-        var mesh=Geometry.Merge(meshes);var components=Geometry.Components(Geometry.Neighbors(mesh,tolerance));
+        var mesh=Geometry.Merge(meshes);
+        // Split normals and material seams must not turn each triangle into an
+        // independent solid. Only the analysis labels share coincident points.
+        if(tolerance<=0&&mesh.Vertices.Length>0)
+        {
+            var size=mesh.Vertices.Aggregate(Vector3.Max)-mesh.Vertices.Aggregate(Vector3.Min);
+            tolerance=Math.Max(size.X,Math.Max(size.Y,size.Z))*1e-6f;
+        }
+        var components=Geometry.Components(Geometry.Neighbors(mesh,tolerance));
         faces=Enumerable.Range(0,mesh.Triangles.Length/3).Select(t=>new Face(mesh.Vertices[mesh.Triangles[t*3]],mesh.Vertices[mesh.Triangles[t*3+1]],mesh.Vertices[mesh.Triangles[t*3+2]],components[mesh.Triangles[t*3]])).ToArray();
         root=Build(0,faces.Length);
     }

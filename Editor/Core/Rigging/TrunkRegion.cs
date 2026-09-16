@@ -6,12 +6,27 @@ using Vector3=System.Numerics.Vector3;
 /// changing mesh connectivity. Detached parts need independent axial evidence.</summary>
 internal sealed class TrunkRegion
 {
-    internal sealed record Attachment(Vector3 Joint,Vector3 Origin,Vector3 Axis,float Radius,float Direction,bool[] Moving,float CenterX,float Side)
+    internal sealed record Attachment(Vector3 Joint,Vector3 Origin,Vector3 Axis,float Radius,float Direction,bool[] Moving,float CenterX,float Side,HashSet<Vector3> PelvisAnchors)
     {
         internal float Support(Vector3 point)
         {
-            float support=Smooth((Direction*(point.Y-Joint.Y)+Radius*1.5f)/Radius);
-            if(Side!=0)support=Math.Min(support,Smooth((Side*(point.X-CenterX)/Math.Max(Math.Abs(Joint.X-CenterX),Radius)-.1f)/.6f));
+            var delta=point-Joint;float along=Vector3.Dot(delta,Axis);
+            // Thighs can cross the character's midline. Follow their measured
+            // axis rather than clipping their weights against a symmetry plane.
+            if(Direction<0)return PelvisAnchors.Contains(point)?0:Smooth(along/Radius);
+            // A lowered arm lies below its shoulder. Remove displacement along
+            // the limb before testing the transverse trunk boundary.
+            float support=Smooth((Direction*(delta.Y-Math.Max(along,0)*Axis.Y)+Radius*1.5f)/Radius);
+            if(Side!=0)
+            {
+                // The inner shoulder envelope cannot extend across the central
+                // chest, especially when an arm points downward beside it.
+                float socket=Math.Abs(Joint.X-CenterX),span=Math.Min(Radius,socket*.5f);
+                if(span>0)support=Math.Min(support,Smooth((Side*(point.X-CenterX)-socket+span)/span));
+            }
+            // Trunk points behind a limb socket must not inherit its motion
+            // just because they share its height. Respect the measured limb axis.
+            if(Side!=0)support=Math.Min(support,Smooth(along/Radius+.5f));
             return support;
         }
     }
@@ -30,6 +45,21 @@ internal sealed class TrunkRegion
         var attachments=new List<Attachment>();Attachments=[];
         if(top<=lower||lower<=bottom||!Axial.Any(b=>b))return;
         var mesh=Geometry.Merge(character.Meshes);var graph=Geometry.Neighbors(mesh,height*1e-5f);
+        var pelvisAnchors=new HashSet<Vector3>();
+        if(Bone("UpperLeg.L") is {} left&&Bone("UpperLeg.R") is {} right)
+        {
+            float hipY=(left.Position.Y+right.Position.Y)*.5f,center=Bone("Pelvis")!.Position.X;
+            float width=Math.Abs(left.Position.X-right.Position.X)*.1f;
+            // On coarse meshes a single central edge can span the entire
+            // pelvis. Its lower endpoint must stay axial too, otherwise linear
+            // interpolation pulls the middle of the pelvic panel with a leg.
+            for(int v=0;v<graph.Length;v++)
+            {
+                var point=mesh.Vertices[v];
+                if(point.Y>hipY||Math.Abs(point.X-center)>width)continue;
+                if(graph[v].Any(n=>mesh.Vertices[n].Y>=lower&&Math.Abs(mesh.Vertices[n].X-center)<=width))pelvisAnchors.Add(point);
+            }
+        }
         var surface=new ImportedCharacter{Meshes=character.Meshes.Where(m=>m.Kind is MeshKind.Body or MeshKind.Clothing).Select(m=>m with{Kind=MeshKind.Body}).ToArray()};
         foreach(var (start,end,root,direction) in new[]{
             ("UpperArm.L","LowerArm.L","Clavicle.L",1f),("UpperArm.R","LowerArm.R","Clavicle.R",1f),
@@ -40,9 +70,9 @@ internal sealed class TrunkRegion
             var axis=Vector3.Normalize(b.Position-a.Position);var origin=Vector3.Zero;
             MeshSections.Section[] sections=[];
             // A proximal arm plane can still intersect the torso or an open
-            // sleeve. Find a closed upper-arm contour before the elbow. Hip
-            // and neck attachment cuts retain their own established locations.
-            foreach(float fraction in start.StartsWith("UpperArm.")?new[]{.3f,.4f,.5f,.6f}:new[]{.3f})
+            // sleeve. Broad thighs can remain joined near the crotch too.
+            // Search down each shaft while keeping the socket at its joint.
+            foreach(float fraction in start=="Neck"?new[]{.3f}:new[]{.3f,.4f,.5f,.6f,.7f,.8f})
             {
                 origin=Vector3.Lerp(a.Position,b.Position,fraction);
                 sections=MeshSections.Cut(surface,origin,axis,height*.15f,height*1e-5f)
@@ -56,8 +86,8 @@ internal sealed class TrunkRegion
             float radius=sections.Where(s=>Vector3.Distance(s.Center,section.Center)<section.Radius*.5f).Max(s=>s.Radius);
             var moving=new bool[rig.Bones.Length];
             for(int i=0;i<moving.Length;i++)moving[i]=rig.Bones[i].Role==root||rig.Bones[i].Role==start||rig.Bones[i].Parent>=0&&moving[rig.Bones[i].Parent];
-            float centerX=Bone("Chest")?.Position.X??0;
-            attachments.Add(new(a.Position,origin,axis,radius,direction,moving,centerX,start.StartsWith("UpperArm.")?Math.Sign(a.Position.X-centerX):0));
+            float centerX=Bone(direction<0?"Pelvis":"Chest")?.Position.X??0;
+            attachments.Add(new(a.Position,origin,axis,radius,direction,moving,centerX,start=="Neck"?0:Math.Sign(a.Position.X-centerX),pelvisAnchors));
             for(int v=0;v<graph.Length;v++)graph[v].RemoveAll(n=>
             {
                 float x=Vector3.Dot(mesh.Vertices[v]-origin,axis),y=Vector3.Dot(mesh.Vertices[n]-origin,axis);
@@ -68,21 +98,37 @@ internal sealed class TrunkRegion
         }
         Attachments=attachments.ToArray();if(Attachments.Length==0)return;
         var components=Geometry.Components(graph);var trunk=new bool[components.Max()+1];var ends=RigGeometry.SegmentEnds(rig);
-        for(int v=0;v<mesh.Vertices.Length;v++)
+        bool NearAxis(Vector3 point)
         {
-            var point=mesh.Vertices[v];if(point.Y<lower||point.Y>top||trunk[components[v]])continue;
             float axial=float.PositiveInfinity,other=float.PositiveInfinity;
             for(int b=0;b<rig.Bones.Length;b++)if(rig.Bones[b].Deform)
             {
                 float distance=Vector3.DistanceSquared(point,Geometry.ClosestOnSegment(point,rig.Bones[b].Position,ends[b]));
                 if(Axial[b])axial=Math.Min(axial,distance);else other=Math.Min(other,distance);
             }
-            if(axial<other*.5f)trunk[components[v]]=true;
+            return axial<other*.5f;
+        }
+        var minimum=Enumerable.Repeat(new Vector3(float.PositiveInfinity),trunk.Length).ToArray();
+        var maximum=Enumerable.Repeat(new Vector3(float.NegativeInfinity),trunk.Length).ToArray();
+        for(int v=0;v<mesh.Vertices.Length;v++)
+        {
+            var point=mesh.Vertices[v];int c=components[v];
+            minimum[c]=Vector3.Min(minimum[c],point);maximum[c]=Vector3.Max(maximum[c],point);
+            if(point.Y<=top&&!trunk[c]&&NearAxis(point))trunk[c]=true;
+        }
+        // Detached pelvic shells may have no vertex near a spine joint.
+        // Their spatial center still distinguishes them from separate limbs.
+        for(int c=0;c<trunk.Length;c++)if(!trunk[c])
+        {
+            var center=(minimum[c]+maximum[c])*.5f;
+            if(center.Y<=top&&NearAxis(center))trunk[c]=true;
         }
         int offset=0;
         for(int p=0;p<character.Meshes.Length;offset+=character.Meshes[p++].Vertices.Length)
             if(character.Meshes[p].Kind is MeshKind.Body or MeshKind.Clothing)
-                for(int v=0;v<Vertices[p].Length;v++)Vertices[p][v]=trunk[components[offset+v]]&&mesh.Vertices[offset+v].Y>=bottom&&mesh.Vertices[offset+v].Y<=top;
+                // The pelvis surface extends below its joint. The measured
+                // limb cuts bound it; a joint-height cutoff loses the groin.
+                for(int v=0;v<Vertices[p].Length;v++)Vertices[p][v]=trunk[components[offset+v]]&&mesh.Vertices[offset+v].Y<=top;
     }
     internal float Blend(Vector3 point)
     {

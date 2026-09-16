@@ -55,7 +55,7 @@ sealed class BoneOverlay
         var ends=RigGeometry.SegmentEnds(rig);
         for(int i=0;i<rig.Bones.Length;i++)
         {
-            var bone=rig.Bones[i];if(!bone.Deform)continue;
+            var bone=rig.Bones[i];if(!RigGeometry.CanPose(rig,i))continue;
             var end=ends[i];
             if(Vec.DistanceSquared(end,bone.Position)<1e-8f)
             {

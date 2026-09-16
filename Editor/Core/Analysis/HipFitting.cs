@@ -6,6 +6,40 @@ using Vector3=System.Numerics.Vector3;
 /// the pelvis. Ambiguous branches and large changes retain the original prior.</summary>
 internal static class HipFitting
 {
+    internal static void RefineDetached(Anatomy anatomy,IReadOnlyList<MeshSections.Section> sections,float height,SurfaceVisibility volume)
+    {
+        foreach(string side in new[]{"L","R"})
+        {
+            var prior=anatomy.Points["UpperLeg."+side];if(prior.Corrected)continue;
+            var knee=anatomy["LowerLeg."+side];float sign=side=="L"?1:-1;
+            int Coverage(Vector3 hip)=>Enumerable.Range(1,19).Count(i=>volume.Contains(Vector3.Lerp(knee,hip,i/20f),height*1e-5f));
+            int oldCoverage=Coverage(prior.Position);if(oldCoverage>=17)continue;
+            var rows=sections.Where(s=>s.Center.Y>knee.Y+height*.04f&&s.Center.Y<prior.Position.Y+height*.06f&&
+                (s.Center.X-anatomy.SymmetryPlaneX)*sign>height*.02f&&s.Radius<height*.08f)
+                .GroupBy(s=>s.Center.Y).OrderBy(g=>g.Key).ToArray();
+            var path=new List<MeshSections.Section>();var previous=knee;
+            foreach(var row in rows)
+            {
+                float step=row.Key-previous.Y;
+                if(path.Count>0&&step>height*.011f)break;
+                var next=row.MinBy(s=>Vector3.DistanceSquared(s.Center,previous));
+                if(next is null)continue;
+                float lateral=new Vector3(next.Center.X-previous.X,0,next.Center.Z-previous.Z).Length();
+                if(lateral>height*.035f){if(path.Count>0)break;continue;}
+                path.Add(next);previous=next.Center;
+            }
+            if(path.Count<12||path[^1].Center.Y-path[0].Center.Y<height*.08f)continue;
+            var cap=path.Where(s=>s.Center.Y>path[^1].Center.Y-height*.06f).MaxBy(s=>s.MinimumRadius);
+            if(cap is null)continue;
+            float shaft=path.Take(path.Count/2).Average(s=>s.MinimumRadius);
+            // A bracketed expansion identifies a detached ball/socket. A plain
+            // taper or open shaft cannot justify a large correction to a hip.
+            if(cap.MinimumRadius<shaft*1.5f||path[^1].MinimumRadius>cap.MinimumRadius*.75f||
+                cap.Center.Y>=path[^1].Center.Y-height*.005f||Vector3.Distance(cap.Center,prior.Position)>height*.22f)continue;
+            if(!volume.Contains(cap.Center,height*1e-5f)||Coverage(cap.Center)<Math.Max(17,oldCoverage+4))continue;
+            anatomy.Points[prior.Role]=prior with{Position=cap.Center};
+        }
+    }
     public static void RaiseLowHips(Anatomy anatomy,IReadOnlyList<MeshSections.Section> sections,float height,SurfaceVisibility volume)
     {
         var old=new[]{anatomy.Points["UpperLeg.L"],anatomy.Points["UpperLeg.R"]};

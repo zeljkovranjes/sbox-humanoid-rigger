@@ -158,7 +158,22 @@ public static class BodyDetector
         a.RecomputeSpine();
         if(h<a.Height*.999f)
         {
+            var neck=a.Points["Neck"];
+            var neckSection=MeshSections.Cut(character,new(center,min.Y+h*.85f,neck.Position.Z),Vector3.UnitY,h*.2f,h*1e-5f)
+                .Where(s=>Math.Abs(s.Center.X-center)<h*.05f&&s.Radius<h*.1f)
+                .OrderByDescending(s=>s.Area).FirstOrDefault();
+            if(neckSection is not null)a.Set("Neck",neckSection.Center,neck.Confidence);
             var head=a.Points["Head"];
+            // A muzzle or dense facial topology can bias the central vertex
+            // strip forward. A closed skull section measures the whole volume.
+            var skull=MeshSections.Cut(character,new(center,head.Position.Y,a["Neck"].Z),Vector3.UnitY,h*.35f,h*1e-5f)
+                .Where(s=>s.Area>h*h*.002f&&Math.Abs(s.Center.X-center)<h*.1f&&Math.Abs(s.Center.Z-a["Neck"].Z)<h*.15f)
+                .OrderByDescending(s=>s.Area).FirstOrDefault();
+            if(skull is not null&&Vector3.Distance(head.Position,skull.Center)>h*.025f)
+            {
+                a.Set("Head",skull.Center,head.Confidence);
+                head=a.Points["Head"];
+            }
             if(Math.Abs(head.Position.Z-a["Neck"].Z)>h*.1f)
                 a.Set("Head",new Vector3(center,head.Position.Y,a["Neck"].Z),head.Confidence);
             // A large skull needs an envelope spanning its measured volume. A
@@ -167,7 +182,7 @@ public static class BodyDetector
             var end=a["Head"];end.Y=max.Y-(max.Y-end.Y)*.1f;
             end=a.Volume.Refine(end,a.Height*.025f);
             if(a.Volume.Contains(end)&&end.Y>a["Head"].Y)a.HeadEnd=end;
-            else foreach(float fraction in new[]{.2f,.3f,.4f})
+            else foreach(float fraction in new[]{.2f,.3f,.4f,.5f,.6f,.7f,.8f})
             {
                 var seed=new Vector3(center,max.Y-(max.Y-a["Head"].Y)*fraction,a["Neck"].Z);
                 var section=MeshSections.Cut(character,seed,Vector3.UnitY,a.Height*.5f,a.Height*1e-5f)

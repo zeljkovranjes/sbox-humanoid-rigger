@@ -10,6 +10,7 @@ public sealed class ValidationReport
     public List<ValidationIssue> Issues {get;}=[];
     public List<StressResult> StressTests {get;}=[];
     public List<StressResult> JointStressTests {get;}=[];
+    public List<StressResult> NativeStressTests {get;}=[];
     public int Repairs {get;set;}
     public int RepairPasses {get;set;}
     public bool Passed=>Issues.All(i=>!i.Error) && StressTests.Count>0;
@@ -65,6 +66,8 @@ public static class RigValidator
             }
         }
         if(r.Issues.Any(i=>i.Error))return r;
+        if(geometry?.InfluenceAllowed is {} allowed&&rig.Weights.Where((part,p)=>part.Where((weights,v)=>weights.Any(w=>w.Weight>1e-6f&&!allowed(p,v,w.Bone))).Any()).Any())
+        {Error("weight-ownership","A weight repair crossed a confirmed anatomical boundary.");return r;}
         if(geometry?.Trunk?.HasBleeding(character,rig)==true){Error("weight-bleeding","A weight repair reintroduced a remote torso attachment.");return r;}
         var ends=RigGeometry.SegmentEnds(rig);
         var locality=new SkinningLocality(character,rig,ends);
@@ -87,7 +90,12 @@ public static class RigValidator
         Vector3[][] Buffers()=>character.Meshes.Select(m=>new Vector3[m.Vertices.Length]).ToArray();
         void Measure(int i,Vector3[][] buffer)
         {
-            if(Deformation.IsApplicable(specifications[i],roles))tests[i]=MeasurePose(character,rig,specifications[i],faces,buffer,height);
+            if(Deformation.IsApplicable(specifications[i],roles))
+            {
+                var transforms=geometry?.Transforms(rig,specifications[i])??Deformation.BoneTransforms(rig,Deformation.JointRotations(rig,specifications[i]));
+                Deformation.ApplyTransforms(character,rig,transforms.Positions,transforms.Rotations,buffer);
+                tests[i]=MeasureDeformed(character,rig,specifications[i].Name,faces,buffer,transforms.Rotations,height);
+            }
         }
         // Poses read the same frozen weights and write separate buffers. Keep
         // report order and each pose's arithmetic serial and deterministic.
@@ -109,6 +117,10 @@ public static class RigValidator
         var transforms=Deformation.BoneTransforms(rig,Deformation.JointRotations(rig,pose));
         var rotations=transforms.Rotations;
         Deformation.ApplyTransforms(character,rig,transforms.Positions,rotations,deformed);
+        return MeasureDeformed(character,rig,pose.Name,faces,deformed,rotations,height);
+    }
+    internal static StressResult MeasureDeformed(ImportedCharacter character,GeneratedRig rig,string name,BindTriangle[][] faces,Vector3[][] deformed,System.Numerics.Quaternion[] rotations,float height)
+    {
         float stretch=1,minArea=1,sourceEdge=0,deformedEdge=0;int nonFinite=0,invalidMeasurements=0;
         int reversed=0;double surfaceArea=0,reversedArea=0;
         for(int p=0;p<character.Meshes.Length;p++)
@@ -140,6 +152,6 @@ public static class RigValidator
                 }
             }
         }
-        return new(pose.Name,stretch,minArea,nonFinite,sourceEdge,deformedEdge,invalidMeasurements,reversed,surfaceArea>0?(float)(reversedArea/surfaceArea):0);
+        return new(name,stretch,minArea,nonFinite,sourceEdge,deformedEdge,invalidMeasurements,reversed,surfaceArea>0?(float)(reversedArea/surfaceArea):0);
     }
 }

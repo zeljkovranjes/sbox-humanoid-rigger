@@ -23,6 +23,37 @@ the solver tries nearby sections farther along the upper arm. A valid closed
 contour restores the anatomical boundary used to keep arm weights off the trunk.
 This uses mesh geometry and joint positions, without model-specific rules.
 
+For heads with long ears, horns or crests, a local neck bottleneck between
+shoulder and skull expansion provides an alternative to total-height proportions.
+A closed neck contour confirms that prior. Skull cross sections reduce muzzle
+and vertex-density bias without changing the character's measured height.
+
+Sparse fingertips can be identified from terminal rings when volume samples
+confirm a solid digit behind the ring. Separate detected tips partition nearby
+finger surfaces, and a resolved neighboring knuckle can refine shortened chains.
+Proposed segments must remain inside the mesh; reviewed joints are preserved.
+These checks do not impose a five-finger hand topology.
+
+Limb support on the trunk also fades behind the measured shoulder or hip axis.
+Chest and pelvic vertices must not inherit limb motion merely because their
+vertical distance is small. The transition uses the local limb radius. Thighs
+follow their own axes even when their surfaces cross the character's midline.
+Long central edges spanning the pelvis retain axial ownership at both ends to
+avoid pulling the interior of coarse faces through weight interpolation.
+Any new boundary fold receives a pose-constrained refit;
+the existing deformation checks still gate acceptance of the repaired weights.
+
+A closed neck contour separates connected skull surfaces from the torso. Cranial
+components exclude limbs and use head ownership above a short neck transition.
+Pose repair preserves those confirmed influence boundaries so it cannot trade
+facial rigidity for better triangle metrics by attaching the face to a clavicle.
+
+Volume containment shares coincident seam vertices in its analysis graph. Split
+normals and UVs must not turn individual triangles into separate closed solids.
+The source topology is unchanged. A detached thigh whose prior socket lies
+outside its volume can be traced through closed sections to a bracketed ball
+joint, provided containment improves and reviewed landmarks stay unchanged.
+
 Residual deformation is repaired by fitting local weights against all applicable
 stress poses together. The fit penalizes signed surface-volume reversal, area
 collapse and excessive edge stretch with a bounded projected quasi-Newton solve.

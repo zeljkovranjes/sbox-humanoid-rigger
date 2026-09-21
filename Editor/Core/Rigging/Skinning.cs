@@ -13,7 +13,7 @@ public static class Skinning
         internal readonly Dictionary<bool,GraphField> Fields=[];
         // Measured limb boundaries for this skeleton, and trunk membership in
         // the merged vertex order.
-        internal TrunkRegion? Trunk;internal bool[]? TrunkVertices;
+        internal TrunkRegion? Trunk;internal bool[]? TrunkVertices;internal SkinningLocality? Locality;
         internal SolveCache(ImportedCharacter character)
         {
             Surface=new(){Meshes=[Geometry.Merge(character.Meshes)]};
@@ -29,6 +29,7 @@ public static class Skinning
         if(cache.Trunk is null)
         {
             cache.Trunk=new(character,rig);cache.TrunkVertices=cache.Trunk.Vertices.SelectMany(part=>part).ToArray();
+            cache.Locality=new(character,rig,RigGeometry.SegmentEnds(rig));
         }
         // Material boundaries must not create separate skinning domains. Preserve
         // the original vertex ordering so weights can be split back without loss.
@@ -109,7 +110,7 @@ public static class Skinning
             RigWork.For(bones.Length,traceWorkers,TraceBone);
             graph=new(edges,denominators,distances,nearest,geodesic);cache.Fields.Add(useRegionSeeds,graph);
             }
-            var claim=new float[bones.Length];
+            var claim=new float[bones.Length];var fade=new float[bones.Length];
             for(int v=0;v<count;v++)
             {
                 var p=mesh.Vertices[v];var weights=new float[bones.Length];
@@ -134,6 +135,18 @@ public static class Skinning
                 // from anatomy rather than having to restore it.
                 cache.Trunk!.Constrain(p,cache.TrunkVertices![v],claim);
                 for(int b=0;b<bones.Length;b++)weights[b]*=claim[b];
+                // The field never quite reaches zero. On a very large torso its tail
+                // leaves a neck weight on the belly. Fade each bone out toward its
+                // reach, as the heat solve does. A tall accessory can lie beyond
+                // every bone's reach; it keeps the field it had.
+                float faded=0;
+                for(int b=0;b<bones.Length;b++)
+                {
+                    fade[b]=0;if(weights[b]<=0)continue;
+                    float t=Math.Clamp((Vector3.Distance(p,Geometry.ClosestOnSegment(p,bones[b].Position,ends[b]))/cache.Locality!.Limit(b,p)-.72f)/.24f,0,1);
+                    fade[b]=weights[b]*(1-t*t*(3-2*t));faded+=fade[b];
+                }
+                if(faded>=1e-30f)Array.Copy(fade,weights,weights.Length);
                 var total=weights.Sum();
                 if(total<1e-30f) throw new InvalidOperationException($"Mesh '{mesh.Name}' is too far from the body to skin safely.");
                 for(int b=0;b<bones.Length;b++) weights[b]/=total;

@@ -180,8 +180,11 @@ internal sealed class TrunkRegion
             if(!trunk&&limit.Socket is null&&limit.Girdle is null&&limit.Hip is null)continue;
             float support=Math.Max(trunk||limit.Socket is not null?limit.Support(point):limit.Girdle?.Girdle(point)??limit.Hip!.Inner(point),1e-4f);
             if(support<1)for(int b=0;b<claim.Length;b++)if(limit.Moving[b])claim[b]*=support;
-            // Past its socket a limb is its own; the trunk lets go of it.
-            float beyond=limit.Socket?.Beyond(point)??limit.Hip?.Beyond(point)??0;
+            // Past its socket a limb is its own; the trunk lets go of it, but only
+            // as far as the limb holds on. Where another rule keeps the limb off,
+            // such as the pelvic anchors, releasing the trunk too would leave the
+            // vertex to whichever distant bone remains.
+            float beyond=Math.Min(limit.Socket?.Beyond(point)??limit.Hip?.Beyond(point)??0,support);
             if(beyond>0)for(int b=0;b<claim.Length;b++)if(Axial[b])claim[b]*=Math.Max(1-beyond,1e-4f);
         }
     }

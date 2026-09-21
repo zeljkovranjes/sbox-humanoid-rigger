@@ -56,7 +56,13 @@ internal sealed record ArmSocket(Vector3 Armpit,Vector3 Center,Vector3 Axis,floa
     /// <summary>How far a point lies out along the arm itself. The trunk carries
     /// the socket, not the limb: a spine weight lingering down the arm blends
     /// every vertex there, and blended vertices lose volume when it turns.</summary>
-    internal float Beyond(Vector3 point)=>Support(point)*Smooth((Vector3.Dot(point-Center,Axis)/Radius-.5f)/1.5f);
+    internal float Beyond(Vector3 point)
+    {
+        // Only within the arm's own thickness. A hanging arm points at the
+        // floor, so the hips lie far along its axis without being any part of it.
+        var offset=point-Center;float along=Vector3.Dot(offset,Axis),radial=(offset-Axis*along).Length();
+        return Support(point)*Smooth((along/Radius-.5f)/1.5f)*(1-Smooth((radial/Radius-1.6f)/.7f));
+    }
     /// <summary>The shoulder girdle carries the socket: neither the arm beyond
     /// it nor the flank below the armpit.</summary>
     internal float Girdle(Vector3 point)=>(1-Smooth((Vector3.Dot(point-Center,Axis)/Radius-.5f)/1.5f))*Smooth((point.Y-Armpit.Y)/Radius+.25f);

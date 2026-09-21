@@ -124,18 +124,22 @@ public static class HeatSkinning
         }
         var attached=new bool[count];int sourceOffset=0;
         foreach(var part in character.Meshes){if(part.Kind!=MeshKind.Accessory)for(int v=0;v<part.Vertices.Length;v++)attached[mapping[sourceOffset+v]]=true;sourceOffset+=part.Vertices.Length;}
-        bool produced=false;
+        bool produced=false;var claim=new float[rig.Bones.Length];
+        // Diffusion always leaves a tail: the pelvis reaches well down a thigh and
+        // one leg into the other, and blended vertices lose volume when a joint
+        // turns. The measured boundaries end that tail. Where an arm rests against
+        // the body, though, the field blends smoothly across the shared crease and
+        // cutting it tears that crease, so the plain field follows as a fallback
+        // for whichever the caller can validate.
+        foreach(bool bounded in trunk is null?new[]{false}:new[]{true,false})
         foreach(bool pruneFirst in new[]{false,true})
         {
-        var claim=new float[rig.Bones.Length];
         var nodeWeights=field.Select((solved,v)=>
         {
             var w=(double[])solved.Clone();
-            // Diffusion always leaves a tail: the pelvis reaches well down a
-            // thigh and one leg into the other. The measured boundaries end it.
-            if(trunk is not null&&attached[v])
+            if(bounded&&attached[v])
             {
-                trunk.Constrain(points[v],trunkNodes[v],claim);
+                trunk!.Constrain(points[v],trunkNodes[v],claim);
                 for(int b=0;b<w.Length;b++)w[b]*=claim[b];
             }
             // Remove distant diffusion tails before limiting influence count.

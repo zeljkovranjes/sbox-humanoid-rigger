@@ -11,6 +11,9 @@ public static class Skinning
         internal readonly ImportedCharacter Surface;
         internal readonly VolumeEvidence Volume;
         internal readonly Dictionary<bool,GraphField> Fields=[];
+        // Measured limb boundaries for this skeleton, and trunk membership in
+        // the merged vertex order.
+        internal TrunkRegion? Trunk;internal bool[]? TrunkVertices;
         internal SolveCache(ImportedCharacter character)
         {
             Surface=new(){Meshes=[Geometry.Merge(character.Meshes)]};
@@ -23,6 +26,10 @@ public static class Skinning
 
     internal static Influence[][][] Solve(ImportedCharacter character,GeneratedRig rig,SolveCache cache,bool useLocalityPrior=false,bool useRegionSeeds=false)
     {
+        if(cache.Trunk is null)
+        {
+            cache.Trunk=new(character,rig);cache.TrunkVertices=cache.Trunk.Vertices.SelectMany(part=>part).ToArray();
+        }
         // Material boundaries must not create separate skinning domains. Preserve
         // the original vertex ordering so weights can be split back without loss.
         var weights=SolveSurface(cache.Surface,rig,cache.Volume,character.AnatomicalHeight,useLocalityPrior,useRegionSeeds,cache)[0];int offset=0;
@@ -72,12 +79,20 @@ public static class Skinning
                 // The regional candidate gives disconnected surfaces independent baselines.
                 // A tiny eye/prop close to a bone must not suppress seeds on the
                 // larger head or body; those fields cannot reach one another.
-                var surfaceDistance=Enumerable.Repeat(float.PositiveInfinity,componentCount).ToArray();
+                // A limb's thickness varies along its bone. Measure the nearest
+                // surface around each stretch of the segment: against one global
+                // minimum only the thinnest ring would seed, leaving a deltoid
+                // or upper thigh to a neighboring bone. Surface far outside its
+                // own stretch, such as a flank beside the shoulder, still cannot seed.
+                const int stretches=8;
+                var segment=ends[b]-bones[b].Position;float segmentLength=segment.LengthSquared();
+                int Stretch(int v)=>segmentLength<=0?0:Math.Clamp((int)(Vector3.Dot(mesh.Vertices[v]-bones[b].Position,segment)/segmentLength*stretches),0,stretches-1);
+                var surfaceDistance=Enumerable.Repeat(float.PositiveInfinity,componentCount*stretches).ToArray();
                 // Only eligible points define a region's minimum; a closer point
                 // owned by another bone can otherwise eliminate every valid seed.
                 for(int v=0;v<count;v++)if(!useRegionSeeds||distances[v][b]<=nearest[v]+band)
-                    surfaceDistance[components[v]]=Math.Min(surfaceDistance[components[v]],distances[v][b]);
-                for(int v=0;v<count;v++)if(float.IsFinite(distances[v][b])&&distances[v][b]<=nearest[v]+band && distances[v][b]<=surfaceDistance[components[v]]+height*.015f)
+                {int at=components[v]*stretches+Stretch(v);surfaceDistance[at]=Math.Min(surfaceDistance[at],distances[v][b]);}
+                for(int v=0;v<count;v++)if(float.IsFinite(distances[v][b])&&distances[v][b]<=nearest[v]+band && distances[v][b]<=surfaceDistance[components[v]*stretches+Stretch(v)]+height*.015f)
                 {values[v]=distances[v][b];queue.Enqueue(v,values[v]);}
                 while(queue.TryDequeue(out var v,out float distance))
                 {
@@ -114,6 +129,19 @@ public static class Skinning
                         distance=.5f*distance+.5f*Vector3.Distance(p,Geometry.ClosestOnSegment(p,bones[b].Position,ends[b]));
                     weights[b]=MathF.Exp(-(distance-graph.Nearest[v])/Math.Max(height*.03f,.001f));
                 }
+                // Distance alone lets a limb claim the trunk beside it and the
+                // clavicle claim the arm. Apply the measured limb boundaries here,
+                // so later repairs start from anatomy rather than having to restore it.
+                // Keep a trace so a vertex with no other bone nearby stays skinned.
+                foreach(var limit in cache.Trunk!.Attachments)
+                {
+                    // A socket holds for the whole surface; the other envelopes
+                    // describe the trunk only.
+                    bool trunk=cache.TrunkVertices![v];
+                    if(!trunk&&limit.Socket is null&&limit.Girdle is null)continue;
+                    float support=Math.Max(trunk||limit.Socket is not null?limit.Support(p):limit.Girdle!.Girdle(p),1e-4f);
+                    if(support<1)for(int b=0;b<bones.Length;b++)if(limit.Moving[b])weights[b]*=support;
+                }
                 var total=weights.Sum();
                 if(total<1e-30f) throw new InvalidOperationException($"Mesh '{mesh.Name}' is too far from the body to skin safely.");
                 for(int b=0;b<bones.Length;b++) weights[b]/=total;
@@ -140,9 +168,30 @@ public static class Skinning
                 RigWork.For(workers,workers,Diffuse);
                 (field,nextField)=(nextField,field);
             }
-            result[part]=field.Select(w=>Cleanup(w,rig.Profile.MaximumInfluences)).ToArray();
+            result[part]=field.Select(w=>Cleanup(Limit(w,rig.Profile.MaximumInfluences),rig.Profile.MaximumInfluences)).ToArray();
         }
         return result;
+    }
+    /// <summary>Dropping the weakest influence outright leaves a step in the
+    /// field. Across the short edges of a dense mesh even a few percent is a
+    /// severe stretch once a limb moves. Lower every weight by the largest
+    /// omitted one instead, so an influence reaches zero before it is removed.</summary>
+    internal static float[] Limit(float[] weights,int maximum)
+    {
+        if(maximum<=0||weights.Length<=maximum)return weights;
+        Span<float> strongest=stackalloc float[maximum+1];int count=0;
+        foreach(float value in weights)
+        {
+            if(!float.IsFinite(value)||value<=0)continue;
+            int at=count;while(at>0&&value>strongest[at-1])at--;
+            if(at>maximum)continue;
+            for(int i=Math.Min(count,maximum);i>at;i--)strongest[i]=strongest[i-1];
+            strongest[at]=value;count=Math.Min(count+1,maximum+1);
+        }
+        if(count<=maximum||strongest[0]<=strongest[maximum])return weights;
+        float omitted=strongest[maximum];
+        for(int b=0;b<weights.Length;b++)weights[b]=Math.Max(0,weights[b]-omitted);
+        return weights;
     }
     public static Influence[] Cleanup(IEnumerable<Influence> source,int boneCount,int maximum)
     {

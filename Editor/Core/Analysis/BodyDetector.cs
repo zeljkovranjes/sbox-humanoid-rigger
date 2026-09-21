@@ -94,6 +94,11 @@ public static class BodyDetector
         }
         a.Set("Root",new(center,min.Y,0),.9f);a.Set("Pelvis",Center(.52f,center,.14f),.7f);
         a.Set("Chest",Center(.75f,center,.13f),.7f);a.Set("Neck",Center(.85f,center,.09f),.75f);a.Set("Head",Center(.91f,center,.1f),.75f);a.RecomputeSpine();
+        var sockets=new Dictionary<string,Vector3>();
+        // A measurement that agrees with the estimate changes nothing: distal
+        // landmarks derive from the shoulder, and sparse hands are sensitive to
+        // shifts far smaller than any visible difference. Adopt it as they diverge.
+        Vector3 Adopt(Vector3 estimate,Vector3 socket)=>Vector3.Lerp(estimate,socket,TrunkRegion.Smooth((Vector3.Distance(estimate,socket)/h-.01f)/.015f));
         foreach(var (side,sign) in new[]{("L",1f),("R",-1f)})
         {
             string R(string role)=>role+"."+side;
@@ -119,6 +124,10 @@ public static class BodyDetector
                 downward=MathF.Atan2(shoulder.Y-hand.Y,Math.Abs(hand.X-shoulder.X))*180/MathF.PI;
             }
             if(side=="L") a.Pose=downward<15 ? CharacterPose.TPose : downward<38 ? CharacterPose.APose1 : downward<58 ? CharacterPose.APose2 : CharacterPose.Relaxed;
+            // Proportions only seed the search. Where the silhouette shows the arm
+            // leaving the torso, the joint follows that measured socket instead.
+            if(ArmSocket.Measure(character.Meshes.Where(m=>m.Kind==MeshKind.Body),shoulder,Vector3.Lerp(shoulder,hand,.46f),center,h) is {} socket)
+            {sockets[R("UpperArm")]=socket.Center;shoulder=Adopt(shoulder,socket.Center);}
             var wrist=Vector3.Lerp(hand,shoulder,.11f);
             var clavicle=Vector3.Lerp(a["Chest"],shoulder,.35f);clavicle.Y=shoulder.Y+h*.015f;
             a.Set(R("Clavicle"),clavicle,.7f);a.Set(R("UpperArm"),shoulder,.7f);
@@ -136,6 +145,9 @@ public static class BodyDetector
         {
             if(point.Role=="Root")continue;
             var refined=a.Volume.Refine(point.Position,h*.025f);
+            // Volume clearance grows toward the chest and would pull a measured
+            // socket back inside the ribs.
+            if(sockets.TryGetValue(point.Role,out var measured))refined=Adopt(refined,measured);
             a.Set(point.Role,refined,point.Confidence*(.65f+.35f*a.Views.Agreement(refined)));
         }
         LegFitting.Refine(character,a,h);

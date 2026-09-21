@@ -136,8 +136,10 @@ public static class SkeletonSolver
         // Heat depends on geometry and the fitted skeleton, not trial weights.
         // Keep its immutable candidates within this fit so body and finger repair
         // share one solve; validation receives writable copies below.
-        var heat=new Lazy<Influence[][][][]>(()=>HeatSkinning.Candidates(character,rig).ToArray());
         var skinning=new Skinning.SolveCache(character);
+        // The envelope solve below measures the limb boundaries first; heat
+        // shares them, or its fallback would hand the flank back to the arm.
+        var heat=new Lazy<Influence[][][][]>(()=>HeatSkinning.Candidates(character,rig,trunk:skinning.Trunk).ToArray());
         var validation=new ValidationGeometry(character);
         rig.Weights=Skinning.Solve(character,rig,skinning);
         rig.Report=RigValidator.ValidateAndRepair(character,rig,validation);

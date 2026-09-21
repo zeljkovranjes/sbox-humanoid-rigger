@@ -29,7 +29,7 @@ Classic Citizen has four fingers; choose Human Citizen for five independent fing
 
 ModelDoc constraints and IK settings accompany Vmdl output. Portable skeleton exports retain bones and skin weights, but do not reproduce Source 2's constraint evaluator in other applications.
 
-Known limitation: torso/pelvis isolation can still fail on some dense characters and take a long time to validate. Rigs with unresolved validation errors remain blocked from saving.
+Shoulders follow the measured armpit, not body proportions, and an arm's weights end at that socket, so raising an arm leaves the ribs and flank in place. This needs an open rest pose: import a T- or A-pose where possible. When an arm is bound against the body, part of the torso can still follow it; the rig reports that as a warning. Rigs with unresolved validation errors remain blocked from saving. Known limitation: checking every joint of a very dense character (100,000+ vertices) can still take a long time.
 
 Obj exports the mesh and materials; Fbx, Gltf and Glb also retain the rig and skin weights. Keep external Gltf buffers/textures and Obj material files beside their model. Compressed glTF extensions and separate UV transforms per material texture must be baked before import.
 

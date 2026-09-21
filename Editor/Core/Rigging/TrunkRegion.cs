@@ -6,9 +6,16 @@ using Vector3=System.Numerics.Vector3;
 /// changing mesh connectivity. Detached parts need independent axial evidence.</summary>
 internal sealed class TrunkRegion
 {
-    internal sealed record Attachment(Vector3 Joint,Vector3 Origin,Vector3 Axis,float Radius,float Direction,bool[] Moving,float CenterX,float Side,HashSet<Vector3> PelvisAnchors)
+    /// <param name="Socket">Measured arm boundary, replacing the envelope, which lets
+    /// an arm own the ribs below its armpit.</param>
+    /// <param name="Receiver">Bone inheriting weight this attachment gives up,
+    /// or -1 for the axial skeleton.</param>
+    /// <param name="Girdle">Socket bounding a clavicle's envelope. Joint height
+    /// alone cannot tell the armpit from the flank just below it.</param>
+    internal sealed record Attachment(Vector3 Joint,Vector3 Origin,Vector3 Axis,float Radius,float Direction,bool[] Moving,float CenterX,float Side,HashSet<Vector3> PelvisAnchors,ArmSocket? Socket=null,int Receiver=-1,ArmSocket? Girdle=null)
     {
-        internal float Support(Vector3 point)
+        internal float Support(Vector3 point)=>Socket?.Support(point)??(Girdle is null?Envelope(point):Math.Min(Envelope(point),Girdle.Girdle(point)));
+        float Envelope(Vector3 point)
         {
             var delta=point-Joint;float along=Vector3.Dot(delta,Axis);
             // Thighs can cross the character's midline. Follow their measured
@@ -79,6 +86,15 @@ internal sealed class TrunkRegion
                     .Where(s=>s.Radius>height*.002f&&s.Radius<height*.1f&&Vector3.Distance(s.Center,origin)<s.Radius*.6f).ToArray();
                 if(sections.Length>0)break;
             }
+            float centerX=Bone(direction<0?"Pelvis":"Chest")?.Position.X??0;
+            var socket=start.StartsWith("UpperArm.")?ArmSocket.Measure(surface.Meshes,a.Position,b.Position,centerX,height):null;
+            // An open sleeve or a segmented shell has no closed contour anywhere
+            // along the arm. The silhouette still shows where it leaves the torso.
+            if(sections.Length==0&&socket is not null)
+            {
+                origin=socket.Center+socket.Axis*socket.Radius;
+                sections=[new(origin,MathF.PI*socket.Radius*socket.Radius,socket.Radius*1.3f,socket.Radius)];
+            }
             if(sections.Length==0)continue;
             var section=sections.OrderBy(s=>Vector3.Distance(s.Center,origin)).First();
             // Coincident body/clothing contours share a logical cut; source
@@ -86,8 +102,21 @@ internal sealed class TrunkRegion
             float radius=sections.Where(s=>Vector3.Distance(s.Center,section.Center)<section.Radius*.5f).Max(s=>s.Radius);
             var moving=new bool[rig.Bones.Length];
             for(int i=0;i<moving.Length;i++)moving[i]=rig.Bones[i].Role==root||rig.Bones[i].Role==start||rig.Bones[i].Parent>=0&&moving[rig.Bones[i].Parent];
-            float centerX=Bone(direction<0?"Pelvis":"Chest")?.Position.X??0;
-            attachments.Add(new(a.Position,origin,axis,radius,direction,moving,centerX,start=="Neck"?0:Math.Sign(a.Position.X-centerX),pelvisAnchors));
+            float side=start=="Neck"?0:Math.Sign(a.Position.X-centerX);
+            if(socket is not null)
+            {
+                // The arm proper ends at its socket; the clavicle keeps the wider
+                // girdle envelope and inherits what the arm gives up. Listed
+                // first so that hand-over precedes the girdle's own limit.
+                var arm=new bool[moving.Length];int girdle=Array.FindIndex(rig.Bones,bone=>bone.Role==root&&bone.Deform);
+                for(int i=0;i<arm.Length;i++)arm[i]=rig.Bones[i].Role==start||rig.Bones[i].Parent>=0&&arm[rig.Bones[i].Parent];
+                if(girdle>=0&&arm[girdle])girdle=-1;
+                attachments.Add(new(a.Position,origin,axis,radius,direction,arm,centerX,side,pelvisAnchors,socket,girdle));
+                moving=moving.Select((value,i)=>value&&!arm[i]).ToArray();
+            }
+            // A reviewed or imported joint may sit anywhere near the shoulder.
+            // The girdle's envelope follows the measured socket where there is one.
+            if(moving.Any(value=>value))attachments.Add(new(socket?.Center??a.Position,origin,axis,radius,direction,moving,centerX,side,pelvisAnchors,Girdle:socket));
             for(int v=0;v<graph.Length;v++)graph[v].RemoveAll(n=>
             {
                 float x=Vector3.Dot(mesh.Vertices[v]-origin,axis),y=Vector3.Dot(mesh.Vertices[n]-origin,axis);
@@ -133,7 +162,8 @@ internal sealed class TrunkRegion
     internal float Blend(Vector3 point)
     {
         float value=Smooth((point.Y-bottom)/(lower-bottom))*Smooth((top-point.Y)/(height*.025f));
-        foreach(var limit in Attachments)value*=1-Smooth((Vector3.Dot(point-limit.Origin,limit.Axis)/limit.Radius+1)/1.5f);
+        // An arm and its girdle share one measured cut; count it once.
+        foreach(var limit in Attachments)if(limit.Receiver<0)value*=1-Smooth((Vector3.Dot(point-limit.Origin,limit.Axis)/limit.Radius+1)/1.5f);
         return value;
     }
     internal bool HasBleeding(ImportedCharacter character,GeneratedRig rig)
@@ -142,7 +172,19 @@ internal sealed class TrunkRegion
             foreach(var limit in Attachments)if(limit.Support(character.Meshes[p].Vertices[v])==0&&rig.Weights[p][v].Any(w=>limit.Moving[w.Bone]&&w.Weight>1e-6f))return true;
         return false;
     }
-    internal bool Allows(int part,int vertex,Vector3 point,Influence[] weights)=>!Vertices[part][vertex]||
-        Attachments.All(a=>a.Support(point)>0||weights.All(w=>!a.Moving[w.Bone]||w.Weight<=1e-6f));
+    /// <summary>Support bounds a limb's share of a trunk vertex. Treating any
+    /// nonzero support as permission lets a repair grow a trace into real pull.</summary>
+    internal bool Allows(int part,int vertex,Vector3 point,Influence[] weights)
+    {
+        if(!Vertices[part][vertex])return true;
+        foreach(var a in Attachments)
+        {
+            float share=0;foreach(var w in weights)if(a.Moving[w.Bone])share+=w.Weight;
+            if(share<=1e-6f)continue;
+            float support=a.Support(point);
+            if(support<=0||share>support+.05f)return false;
+        }
+        return true;
+    }
     internal static float Smooth(float t){t=Math.Clamp(t,0,1);return t*t*(3-2*t);}
 }

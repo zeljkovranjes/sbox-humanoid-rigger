@@ -126,11 +126,16 @@ public static class BodyDetector
             if(side=="L") a.Pose=downward<15 ? CharacterPose.TPose : downward<38 ? CharacterPose.APose1 : downward<58 ? CharacterPose.APose2 : CharacterPose.Relaxed;
             // Proportions only seed the search. Where the silhouette shows the arm
             // leaving the torso, the joint follows that measured socket instead.
+            // The elbow and wrist searches below keep the proportional seed they
+            // were tuned with: they find their own sections, the wrist fit also
+            // reads the elbow, and a seed moved with the shoulder can settle in a
+            // neighboring bottleneck.
+            var joint=shoulder;
             if(ArmSocket.Measure(character.Meshes.Where(m=>m.Kind==MeshKind.Body),shoulder,Vector3.Lerp(shoulder,hand,.46f),center,h) is {} socket)
-            {sockets[R("UpperArm")]=socket.Center;shoulder=Adopt(shoulder,socket.Center);}
+            {sockets[R("UpperArm")]=socket.Center;joint=Adopt(shoulder,socket.Center);}
             var wrist=Vector3.Lerp(hand,shoulder,.11f);
-            var clavicle=Vector3.Lerp(a["Chest"],shoulder,.35f);clavicle.Y=shoulder.Y+h*.015f;
-            a.Set(R("Clavicle"),clavicle,.7f);a.Set(R("UpperArm"),shoulder,.7f);
+            var clavicle=Vector3.Lerp(a["Chest"],joint,.35f);clavicle.Y=joint.Y+h*.015f;
+            a.Set(R("Clavicle"),clavicle,.7f);a.Set(R("UpperArm"),joint,.7f);
             var armSurface=downward>58 ? sideBody : body;
             a.Set(R("LowerArm"),RefineCenter(armSurface,Vector3.Lerp(shoulder,wrist,.52f),wrist-shoulder,h*.045f),.6f);
             a.Set(R("Hand"),RefineCenter(armSurface,wrist,wrist-shoulder,h*.035f),.65f);

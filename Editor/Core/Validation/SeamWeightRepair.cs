@@ -17,8 +17,11 @@ internal static class SeamWeightRepair
         candidate=PoseWeightRepair.Improve(character,candidate,geometry,checks);
         checks=JointCoverage.Measure(character,candidate,geometry);
         bool Safe(StressResult p)=>p.NonFiniteVertices==0&&p.NonFiniteMeasurements==0&&p.ReversedTriangles==0&&p.MaximumStretch<=4&&p.MinimumAreaRatio>=.025f;
+        // Closing seams must not bring a limb onto the torso. A rig that already
+        // carries that warning is no reason to leave its seams open as well.
+        var trunk=new TrunkRegion(character,rig);
         if(candidate.Report.Passed&&candidate.Report.StressTests.All(Safe)&&checks.All(c=>Safe(c.Result))&&seams.Mismatches(candidate.Weights)==0&&
-            !new TrunkRegion(character,rig).HasBleeding(character,candidate))
+            (trunk.HasBleeding(character,rig)||!trunk.HasBleeding(character,candidate)))
         {
             candidate.Report.Repairs=rig.Report.Repairs+candidate.Weights.SelectMany((p,m)=>p.Select((w,v)=>w.SequenceEqual(rig.Weights[m][v])?0:1)).Sum();
             candidate.Report.RepairPasses+=rig.Report.RepairPasses+1;

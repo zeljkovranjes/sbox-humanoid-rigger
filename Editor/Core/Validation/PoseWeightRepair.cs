@@ -4,6 +4,7 @@ namespace HumanoidRigger;
 /// unsafe; only a completely validated candidate can replace the reviewed rig.</summary>
 internal static class PoseWeightRepair
 {
+    const int MaximumFolds=1000;
     internal static GeneratedRig Improve(ImportedCharacter character,GeneratedRig rig,ValidationGeometry geometry,
         (StressPose Pose,StressResult Result)[] joints)
     {
@@ -14,6 +15,12 @@ internal static class PoseWeightRepair
         initial.StressTests.AddRange(rig.Report.StressTests);initial.StressTests.AddRange(joints.Select(j=>j.Result));
         if(!WeightRepair.HasCompleteEvidence(initial,expected.Order().ToArray())||!initial.StressTests.Select(p=>p.Pose).SequenceEqual(expected))return rig;
         if(initial.Passed&&initial.StressTests.All(p=>p.ReversedTriangles==0&&p.MaximumStretch<=4&&p.MinimumAreaRatio>=.025f))return rig;
+        // This fits the faces around each fold against every pose, so its cost
+        // grows with their number. It answers a seam or a socket boundary: a few
+        // dozen folds, a couple of hundred on the hardest characters. Thousands
+        // mean the weights are wrong at a scale a local fit does not mend, and
+        // trying takes tens of minutes on a dense mesh before being rejected.
+        if(initial.StressTests.Sum(p=>(long)p.ReversedTriangles)>MaximumFolds)return rig;
         var trunk=geometry.Trunk;
         if(trunk is not null&&trunk.HasBleeding(character,rig))return rig;
         if(trunk is null)

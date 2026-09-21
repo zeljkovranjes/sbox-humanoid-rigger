@@ -119,7 +119,9 @@ internal sealed class TrunkRegion
             }
             // A reviewed or imported joint may sit anywhere near the shoulder.
             // The girdle's envelope follows the measured socket where there is one.
-            var hip=start.StartsWith("UpperLeg.")?LegSocket.Measure(surface.Meshes,a.Position,b.Position,centerX,height):null;
+            LegSocket? hip=null;
+            if(start.StartsWith("UpperLeg.")&&Bone(end[..^1]+(end.EndsWith('L')?"R":"L")) is {} otherKnee)
+                hip=LegSocket.Measure(surface.Meshes,a.Position,b.Position,otherKnee.Position,centerX,height)??LegSocket.FromSections(surface,a.Position,b.Position,otherKnee.Position,centerX,height);
             if(moving.Any(value=>value))attachments.Add(new(socket?.Center??a.Position,origin,axis,radius,direction,moving,centerX,side,pelvisAnchors,Girdle:socket,Hip:hip));
             for(int v=0;v<graph.Length;v++)graph[v].RemoveAll(n=>
             {

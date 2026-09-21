@@ -138,8 +138,8 @@ public static class Skinning
                     // A socket holds for the whole surface; the other envelopes
                     // describe the trunk only.
                     bool trunk=cache.TrunkVertices![v];
-                    if(!trunk&&limit.Socket is null&&limit.Girdle is null)continue;
-                    float support=Math.Max(trunk||limit.Socket is not null?limit.Support(p):limit.Girdle!.Girdle(p),1e-4f);
+                    if(!trunk&&limit.Socket is null&&limit.Girdle is null&&limit.Hip is null)continue;
+                    float support=Math.Max(trunk||limit.Socket is not null?limit.Support(p):limit.Girdle?.Girdle(p)??limit.Hip!.Inner(p),1e-4f);
                     if(support<1)for(int b=0;b<bones.Length;b++)if(limit.Moving[b])weights[b]*=support;
                 }
                 var total=weights.Sum();

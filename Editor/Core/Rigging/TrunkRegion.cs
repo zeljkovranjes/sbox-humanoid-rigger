@@ -12,9 +12,12 @@ internal sealed class TrunkRegion
     /// or -1 for the axial skeleton.</param>
     /// <param name="Girdle">Socket bounding a clavicle's envelope. Joint height
     /// alone cannot tell the armpit from the flank just below it.</param>
-    internal sealed record Attachment(Vector3 Joint,Vector3 Origin,Vector3 Axis,float Radius,float Direction,bool[] Moving,float CenterX,float Side,HashSet<Vector3> PelvisAnchors,ArmSocket? Socket=null,int Receiver=-1,ArmSocket? Girdle=null)
+    /// <param name="Hip">Measured leg boundary, replacing the level cut through
+    /// the hip joint, which hinges the leg at the crotch.</param>
+    internal sealed record Attachment(Vector3 Joint,Vector3 Origin,Vector3 Axis,float Radius,float Direction,bool[] Moving,float CenterX,float Side,HashSet<Vector3> PelvisAnchors,ArmSocket? Socket=null,int Receiver=-1,ArmSocket? Girdle=null,LegSocket? Hip=null)
     {
-        internal float Support(Vector3 point)=>Socket?.Support(point)??(Girdle is null?Envelope(point):Math.Min(Envelope(point),Girdle.Girdle(point)));
+        internal float Support(Vector3 point)=>Socket?.Support(point)??(Hip is not null?(PelvisAnchors.Contains(point)?0:Hip.Support(point)):
+            Girdle is null?Envelope(point):Math.Min(Envelope(point),Girdle.Girdle(point)));
         float Envelope(Vector3 point)
         {
             var delta=point-Joint;float along=Vector3.Dot(delta,Axis);
@@ -116,7 +119,8 @@ internal sealed class TrunkRegion
             }
             // A reviewed or imported joint may sit anywhere near the shoulder.
             // The girdle's envelope follows the measured socket where there is one.
-            if(moving.Any(value=>value))attachments.Add(new(socket?.Center??a.Position,origin,axis,radius,direction,moving,centerX,side,pelvisAnchors,Girdle:socket));
+            var hip=start.StartsWith("UpperLeg.")?LegSocket.Measure(surface.Meshes,a.Position,b.Position,centerX,height):null;
+            if(moving.Any(value=>value))attachments.Add(new(socket?.Center??a.Position,origin,axis,radius,direction,moving,centerX,side,pelvisAnchors,Girdle:socket,Hip:hip));
             for(int v=0;v<graph.Length;v++)graph[v].RemoveAll(n=>
             {
                 float x=Vector3.Dot(mesh.Vertices[v]-origin,axis),y=Vector3.Dot(mesh.Vertices[n]-origin,axis);

@@ -14,15 +14,25 @@ internal sealed record LegSocket(Vector3 Crotch,Vector3 Axis,float Radius,float 
     const float Rise=50*MathF.PI/180;
     /// <summary>How much of a point belongs to the leg: half at the boundary,
     /// reaching none and all within half a thigh radius on either side.</summary>
-    internal float Support(Vector3 point)
+    internal float Support(Vector3 point)=>Support(point,out _);
+    /// <summary>How far a point lies down the leg itself. The pelvis carries
+    /// the hip, not the thigh: its weight lingering there blends every vertex,
+    /// and blended vertices lose volume when the leg turns.</summary>
+    internal float Beyond(Vector3 point)
     {
+        float support=Support(point,out float depth);
+        return support*TrunkRegion.Smooth(depth/Radius-.5f);
+    }
+    float Support(Vector3 point,out float depth)
+    {
+        depth=0;
         var down=new Vector2(Axis.X,Axis.Y);if(down.LengthSquared()<1e-6f)return 1;
         down=Vector2.Normalize(down);
         // Across the leg, away from the other one. The boundary turns with the
         // leg, so a wide stance keeps the same anatomy.
         var outward=new Vector2(-down.Y,down.X);if(outward.X*Side<0)outward=-outward;
         var below=outward*MathF.Cos(Rise)+down*MathF.Sin(Rise);
-        float depth=Vector2.Dot(new(point.X-Crotch.X,point.Y-Crotch.Y),below);
+        depth=Vector2.Dot(new(point.X-Crotch.X,point.Y-Crotch.Y),below);
         // The boundary keeps rising outward, more so for a wide stance. A
         // thigh still ends at the top of the pelvis, never at the waist.
         float crest=1-TrunkRegion.Smooth(((point.Y-Crotch.Y)/Radius-1.2f)/.6f);

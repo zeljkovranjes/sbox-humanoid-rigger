@@ -109,6 +109,7 @@ public static class Skinning
             RigWork.For(bones.Length,traceWorkers,TraceBone);
             graph=new(edges,denominators,distances,nearest,geodesic);cache.Fields.Add(useRegionSeeds,graph);
             }
+            var claim=new float[bones.Length];
             for(int v=0;v<count;v++)
             {
                 var p=mesh.Vertices[v];var weights=new float[bones.Length];
@@ -129,19 +130,10 @@ public static class Skinning
                         distance=.5f*distance+.5f*Vector3.Distance(p,Geometry.ClosestOnSegment(p,bones[b].Position,ends[b]));
                     weights[b]=MathF.Exp(-(distance-graph.Nearest[v])/Math.Max(height*.03f,.001f));
                 }
-                // Distance alone lets a limb claim the trunk beside it and the
-                // clavicle claim the arm. Apply the measured limb boundaries here,
-                // so later repairs start from anatomy rather than having to restore it.
-                // Keep a trace so a vertex with no other bone nearby stays skinned.
-                foreach(var limit in cache.Trunk!.Attachments)
-                {
-                    // A socket holds for the whole surface; the other envelopes
-                    // describe the trunk only.
-                    bool trunk=cache.TrunkVertices![v];
-                    if(!trunk&&limit.Socket is null&&limit.Girdle is null&&limit.Hip is null)continue;
-                    float support=Math.Max(trunk||limit.Socket is not null?limit.Support(p):limit.Girdle?.Girdle(p)??limit.Hip!.Inner(p),1e-4f);
-                    if(support<1)for(int b=0;b<bones.Length;b++)if(limit.Moving[b])weights[b]*=support;
-                }
+                // Apply the measured limb boundaries here, so later repairs start
+                // from anatomy rather than having to restore it.
+                cache.Trunk!.Constrain(p,cache.TrunkVertices![v],claim);
+                for(int b=0;b<bones.Length;b++)weights[b]*=claim[b];
                 var total=weights.Sum();
                 if(total<1e-30f) throw new InvalidOperationException($"Mesh '{mesh.Name}' is too far from the body to skin safely.");
                 for(int b=0;b<bones.Length;b++) weights[b]/=total;

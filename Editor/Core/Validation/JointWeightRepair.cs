@@ -42,7 +42,13 @@ internal static class JointWeightRepair
                 var axial=character.Meshes.Select(mesh=>mesh.Vertices.Select(point=>Vector3.Dot(point-bone.Position,axis)).ToArray()).ToArray();
                 var trials=new List<(GeneratedRig Rig,StressResult Stress)>();
                 var blends=stress.ReversedTriangles<16?new[]{-.025f,-.05f,-.1f,-.2f,-.35f,.025f,.05f,.1f,.2f,.35f}:new[]{.5f,1f};
-                foreach(float width in new[]{2f,3f,4f,6f})foreach(float blend in blends)
+                foreach(float width in new[]{2f,3f,4f,6f})
+                {
+                // A wider ramp carries the parent's weight further down the limb,
+                // and every blended vertex there loses volume when the joint turns.
+                // Widen only while the narrower ramp still leaves folds.
+                if(trials.Any(t=>t.Stress.ReversedTriangles==0))break;
+                foreach(float blend in blends)
                 {
                     var weights=character.Meshes.Select((mesh,part)=>mesh.Vertices.Select((point,vertex)=>
                         Blend(rig.Weights[part][vertex],rig.Profile.MaximumInfluences,rig.Bones.Length,moving,bone.Parent,
@@ -54,6 +60,7 @@ internal static class JointWeightRepair
                     // Only the best three trials are tested below. Release other
                     // dense weight buffers immediately, preserving stable tie order.
                     if(trials.Count>3)trials=trials.OrderBy(t=>t.Stress.ReversedTriangles).ThenBy(t=>t.Stress.ReversedAreaFraction).Take(3).ToList();
+                }
                 }
                 // A promising broad correction can expose a local seam. Run the
                 // normal cleanup and repair before deciding whether it is better.

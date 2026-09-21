@@ -165,6 +165,26 @@ internal sealed class TrunkRegion
                 // limb cuts bound it; a joint-height cutoff loses the groin.
                 for(int v=0;v<Vertices[p].Length;v++)Vertices[p][v]=trunk[components[offset+v]]&&mesh.Vertices[offset+v].Y<=top;
     }
+    /// <summary>Scale each bone's claim on a point by the measured limb boundaries.
+    /// Distance alone lets a limb claim the trunk beside it, the clavicle claim
+    /// the arm, and a diffusion tail carry the pelvis halfway down a thigh. Every
+    /// solver shares this, so a fallback cannot hand back what another settled.
+    /// A trace remains so a vertex with no other bone nearby stays skinned.</summary>
+    internal void Constrain(Vector3 point,bool trunk,Span<float> claim)
+    {
+        claim.Fill(1);
+        foreach(var limit in Attachments)
+        {
+            // A socket holds for the whole surface; the other envelopes
+            // describe the trunk only.
+            if(!trunk&&limit.Socket is null&&limit.Girdle is null&&limit.Hip is null)continue;
+            float support=Math.Max(trunk||limit.Socket is not null?limit.Support(point):limit.Girdle?.Girdle(point)??limit.Hip!.Inner(point),1e-4f);
+            if(support<1)for(int b=0;b<claim.Length;b++)if(limit.Moving[b])claim[b]*=support;
+            // Past its socket a limb is its own; the trunk lets go of it.
+            float beyond=limit.Socket?.Beyond(point)??limit.Hip?.Beyond(point)??0;
+            if(beyond>0)for(int b=0;b<claim.Length;b++)if(Axial[b])claim[b]*=Math.Max(1-beyond,1e-4f);
+        }
+    }
     internal float Blend(Vector3 point)
     {
         float value=Smooth((point.Y-bottom)/(lower-bottom))*Smooth((top-point.Y)/(height*.025f));

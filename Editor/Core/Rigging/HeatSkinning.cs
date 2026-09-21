@@ -127,9 +127,17 @@ public static class HeatSkinning
         bool produced=false;
         foreach(bool pruneFirst in new[]{false,true})
         {
+        var claim=new float[rig.Bones.Length];
         var nodeWeights=field.Select((solved,v)=>
         {
             var w=(double[])solved.Clone();
+            // Diffusion always leaves a tail: the pelvis reaches well down a
+            // thigh and one leg into the other. The measured boundaries end it.
+            if(trunk is not null&&attached[v])
+            {
+                trunk.Constrain(points[v],trunkNodes[v],claim);
+                for(int b=0;b<w.Length;b++)w[b]*=claim[b];
+            }
             // Remove distant diffusion tails before limiting influence count.
             // Truncating first can discard the only anatomically local bone.
             if(pruneFirst&&attached[v])for(int b=0;b<w.Length;b++)

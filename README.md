@@ -21,16 +21,6 @@ Add the library to your s&box project and open **View → Humanoid Rigger**.
 
 Automatic detection is experimental. Characters need two arms and two legs; review uncertain landmarks and deformation warnings before saving.
 
-**Citizen (Complete)** and **Human Citizen (Complete)** read their full skeleton and rig settings from the installed s&box models. They retain controls, twists, corrective bones and finger helpers, and test the compiled constraints before finishing. The simplified profiles remain available.
-
-A complete Citizen-style skeleton does **not** automatically make a fitted character compatible with stock animations. Different proportions or bind transforms require retargeting. Stock clips and the animation graph are attached only when the reference bind matches. For fitted Human Citizens, CopyPinky is retained but disabled so independently retargeted pinkies have only one driver. Enable it only for ring-driven stock finger animation.
-
-Classic Citizen has four fingers; choose Human Citizen for five independent fingers. Complete profiles retain unused reference finger bones without weighting them. Facial likeness and attachment offsets may still need adjustment for unusual anatomy. Citizen content must be installed; reference models and animations are not bundled with this library.
-
-ModelDoc constraints and IK settings accompany Vmdl output. Portable skeleton exports retain bones and skin weights, but do not reproduce Source 2's constraint evaluator in other applications.
-
-Shoulders follow the measured armpit, not body proportions, and an arm's weights end at that socket, so raising an arm leaves the ribs and flank in place. Legs likewise leave the pelvis along the measured groin crease, from the crotch up to the side of the hip, not at a level cut. Both need an open rest pose: import a T- or A-pose where possible. When an arm is bound against the body, part of the torso can still follow it; the rig reports that as a warning. Rigs with unresolved validation errors remain blocked from saving. A typical character rigs in a few seconds; a very dense one (100,000+ vertices) takes a couple of minutes.
-
 Obj exports the mesh and materials; Fbx, Gltf and Glb also retain the rig and skin weights. Keep external Gltf buffers/textures and Obj material files beside their model. Compressed glTF extensions and separate UV transforms per material texture must be baked before import.
 
 Package ident: `local.chomnr_humanoid_rigger`

@@ -10,7 +10,8 @@ public static class SurfaceRepair
 {
     const int TransferRounds=8;
     const int TransfersPerNeighborhood=1536;
-    sealed record Pose(StressResult Stress,Vector3[][] Points,Vector3[] Bones,Quaternion[] Rotations,HashSet<(int Part,int Face)> Reversed)
+    /// <param name="Still">Bones this pose leaves at their bind transform.</param>
+    sealed record Pose(StressResult Stress,Vector3[][] Points,Vector3[] Bones,Quaternion[] Rotations,HashSet<(int Part,int Face)> Reversed,bool[] Still)
     {
         // Only the accepted rig changes this baseline. Candidate trials can share
         // its measurements; a commit invalidates every face touched by the edit.
@@ -43,7 +44,8 @@ public static class SurfaceRepair
             var transforms=geometry.Transforms(rig,spec);
             var points=character.Meshes.Select(m=>new Vector3[m.Vertices.Length]).ToArray();
             Deformation.ApplyTransforms(character,rig,transforms.Positions,transforms.Rotations,points);
-            var pose=new Pose(initial.StressTests[i],points,transforms.Positions,transforms.Rotations,[]);
+            var still=rig.Bones.Select((bone,b)=>transforms.Rotations[b]==Quaternion.Identity&&Vector3.Distance(transforms.Positions[b],bone.Position)<=height*1e-6f).ToArray();
+            var pose=new Pose(initial.StressTests[i],points,transforms.Positions,transforms.Rotations,[],still);
             for(int p=0;p<faces.Length;p++)for(int t=0;t<faces[p].Length;t++)
             {
                 var f=faces[p][t];if(f.Area<=minimumArea)continue;
@@ -279,9 +281,14 @@ public static class SurfaceRepair
         var indices=vertices.Length>2?vertices.Select((v,i)=>(v,i)).ToDictionary(p=>p.v,p=>p.i):null;
         var scratch=commit?null:new Vector3[vertices.Length];
         var updates=commit?new Vector3[poses.Length][]:null;var reversals=commit?new HashSet<int>[poses.Length]:null;double totalImprovement=0;
+        // A pose that turns none of these bones leaves every triangle here at its
+        // bind shape, inside each limit below, and scores exactly nothing. A
+        // commit still visits it: that writes the new positions back.
+        var bones=commit?null:triangles.SelectMany(t=>new[]{faces[t].A,faces[t].B,faces[t].C}).Distinct().SelectMany(v=>rig.Weights[part][v].Concat(candidate[v])).Select(w=>w.Bone).Distinct().ToArray();
         for(int poseIndex=0;poseIndex<poses.Length;poseIndex++)
         {
-            var pose=poses[poseIndex];var points=scratch??new Vector3[vertices.Length];
+            var pose=poses[poseIndex];
+            if(bones is not null&&Array.TrueForAll(bones,b=>pose.Still[b]))continue;var points=scratch??new Vector3[vertices.Length];
             for(int vertexIndex=0;vertexIndex<vertices.Length;vertexIndex++)
             {
                 int v=vertices[vertexIndex];

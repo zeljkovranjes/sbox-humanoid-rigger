@@ -136,6 +136,37 @@ internal static class PoseWeightFit
             sampleList.Add(new(t.Positions,t.Rotations,vertices.Select(v=>v.Bones.Select(b=>t.Positions[b]+Vector3.Transform(v.Point-rig.Bones[b].Position,t.Rotations[b])-v.Point).ToArray()).ToArray()));
         }
         var samples=sampleList.ToArray();
+        // A face normal carried by a bone does not depend on the weights being
+        // fitted, yet every evaluation and gradient rotated it again for each
+        // corner influence. Rotate once per pose; the same values then enter the
+        // same arithmetic. Very large regions keep the direct path to bound memory.
+        // Most samples turn a single joint. A face none of whose bones turn
+        // rests at its bind shape, far inside every margin below, and adds
+        // exactly nothing to the loss or its gradient. Visit only the others.
+        var turned=samples.Select(sample=>
+        {
+            var moved=vertices.Select(v=>v.Bones.Any(b=>sample.Rotations[b]!=Quaternion.Identity||Vector3.Distance(sample.Bones[b],rig.Bones[b].Position)>geometry.Height*1e-6f)).ToArray();
+            var active=Enumerable.Range(0,faces.Count).Where(f=>moved[faces[f].A]||moved[faces[f].B]||moved[faces[f].C]).ToArray();
+            var used=active.SelectMany(f=>new[]{faces[f].A,faces[f].B,faces[f].C}).Distinct().Order().ToArray();
+            return(Faces:active,Vertices:used);
+        }).ToArray();
+        var corners=new int[faces.Count*3+1];
+        for(int f=0;f<faces.Count;f++)
+        {
+            corners[f*3+1]=corners[f*3]+vertices[faces[f].A].Bones.Length;
+            corners[f*3+2]=corners[f*3+1]+vertices[faces[f].B].Bones.Length;
+            corners[f*3+3]=corners[f*3+2]+vertices[faces[f].C].Bones.Length;
+        }
+        Vector3[][]? carried=(long)corners[^1]*samples.Length>8_000_000?null:samples.Select(sample=>
+        {
+            var normals=new Vector3[corners[^1]];
+            for(int f=0;f<faces.Count;f++)
+            {
+                var face=faces[f];int at=corners[f*3];
+                foreach(int v in new[]{face.A,face.B,face.C})foreach(int bone in vertices[v].Bones)normals[at++]=Vector3.Transform(face.Normal,sample.Rotations[bone]);
+            }
+            return normals;
+        }).ToArray();
         var weightsNow=vertices.Select(v=>v.Initial.ToArray()).ToArray();var candidate=vertices.Select(v=>new double[v.Bones.Length]).ToArray();
         var gradient=vertices.Select(v=>new double[v.Bones.Length]).ToArray();var previousGradient=vertices.Select(v=>new double[v.Bones.Length]).ToArray();
         var previous=vertices.Select(v=>new double[v.Bones.Length]).ToArray();
@@ -203,17 +234,19 @@ internal static class PoseWeightFit
         {
             if(g is not null)foreach(var row in g)Array.Clear(row);
             double loss=0;
-            foreach(var sample in samples)
+            for(int sampleIndex=0;sampleIndex<samples.Length;sampleIndex++)
             {
-                for(int v=0;v<vertices.Count;v++)
+                var sample=samples[sampleIndex];var rotated=carried?[sampleIndex];
+                foreach(int v in turned[sampleIndex].Vertices)
                 {
                     var point=vertices[v].Point;for(int i=0;i<values[v].Length;i++)point+=sample.Delta[v][i]*(float)values[v][i];points[v]=point;
                 }
-                foreach(var f in faces)
+                foreach(int faceIndex in turned[sampleIndex].Faces)
                 {
+                    var f=faces[faceIndex];
                     if(f.Area<=geometry.Height*geometry.Height*1e-10)continue;
                     var a=points[f.A];var b=points[f.B];var c=points[f.C];var n=Vector3.Cross(b-a,c-a);
-                    var transported=Transport(f.A)+Transport(f.B)+Transport(f.C);
+                    var transported=Transport(f.A,0)+Transport(f.B,1)+Transport(f.C,2);
                     double denominator=f.Area*f.Area,volume=Vector3.Dot(n,transported)/denominator;
                     double deficit=VolumeMargin-volume;
                     double violation=Math.Max(0,.001-volume);
@@ -223,21 +256,22 @@ internal static class PoseWeightFit
                         loss+=.5*deficit*deficit;
                         if(g is not null)
                         {
-                            AddVolume(f.A,Vector3.Cross(b-c,transported));AddVolume(f.B,Vector3.Cross(c-a,transported));AddVolume(f.C,Vector3.Cross(a-b,transported));
+                            AddVolume(f.A,0,Vector3.Cross(b-c,transported));AddVolume(f.B,1,Vector3.Cross(c-a,transported));AddVolume(f.C,2,Vector3.Cross(a-b,transported));
                         }
                     }
                     Edge(f.A,f.B,f.AB);Edge(f.B,f.C,f.BC);Edge(f.C,f.A,f.CA);
-                    Vector3 Transport(int v)
+                    Vector3 Carried(int v,int corner,int i)=>rotated is null?Vector3.Transform(f.Normal,sample.Rotations[vertices[v].Bones[i]]):rotated[corners[faceIndex*3+corner]+i];
+                    Vector3 Transport(int v,int corner)
                     {
-                        var normal=Vector3.Zero;var vertex=vertices[v];
-                        for(int i=0;i<values[v].Length;i++)normal+=Vector3.Transform(f.Normal,sample.Rotations[vertex.Bones[i]])*((float)values[v][i]/3);
+                        var normal=Vector3.Zero;
+                        for(int i=0;i<values[v].Length;i++)normal+=Carried(v,corner,i)*((float)values[v][i]/3);
                         return normal;
                     }
-                    void AddVolume(int v,Vector3 derivative)
+                    void AddVolume(int v,int corner,Vector3 derivative)
                     {
                         if(!vertices[v].Editable)return;
                         for(int i=0;i<g![v].Length;i++)
-                            g[v][i]-=(deficit+violationPenalty*violation)*(Vector3.Dot(derivative,sample.Delta[v][i])+Vector3.Dot(n,Vector3.Transform(f.Normal,sample.Rotations[vertices[v].Bones[i]]))/3)/denominator;
+                            g[v][i]-=(deficit+violationPenalty*violation)*(Vector3.Dot(derivative,sample.Delta[v][i])+Vector3.Dot(n,Carried(v,corner,i))/3)/denominator;
                     }
                     double areaDeficit=.03-n.Length()/f.Area;
                     if(areaDeficit>0)

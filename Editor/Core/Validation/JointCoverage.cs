@@ -8,22 +8,24 @@ internal static class JointCoverage
 {
     internal static (StressPose Pose,StressResult Result)[] Measure(ImportedCharacter character,GeneratedRig rig,ValidationGeometry geometry)
     {
-        var result=new List<(StressPose,StressResult)>();
-        var buffer=character.Meshes.Select(m=>new Vector3[m.Vertices.Length]).ToArray();
-        for(int joint=0;joint<rig.Bones.Length;joint++)
+        // Each joint's probes are independent and read only frozen weights.
+        // Share the ordinary worker budget; results keep their joint order.
+        var joints=Enumerable.Range(0,rig.Bones.Length).Where(j=>RigGeometry.CanPose(rig,j)).ToArray();
+        var result=new (StressPose,StressResult)[joints.Length*6];var bindFaces=geometry.Faces;
+        RigWork.For(joints.Length,RigWork.WorkerCount(character.Meshes.Sum(m=>m.Vertices.Length)),()=>character.Meshes.Select(m=>new Vector3[m.Vertices.Length]).ToArray(),(index,buffer)=>
         {
-            if(!RigGeometry.CanPose(rig,joint))continue;
+            int joint=joints[index],probe=index*6;
             var moving=new bool[rig.Bones.Length];moving[joint]=true;
             for(int b=joint+1;b<moving.Length;b++)moving[b]=rig.Bones[b].Parent>=0&&moving[rig.Bones[b].Parent];
             var touched=rig.Weights.Select(p=>p.Select(w=>w.Any(i=>moving[i.Bone])).ToArray()).ToArray();
-            var faces=geometry.Faces.Select((p,m)=>p.Where(f=>touched[m][f.A]||touched[m][f.B]||touched[m][f.C]).ToArray()).ToArray();
+            var faces=bindFaces.Select((p,m)=>p.Where(f=>touched[m][f.A]||touched[m][f.B]||touched[m][f.C]).ToArray()).ToArray();
             foreach(var (axis,name) in new[]{(Vector3.UnitX,"X"),(Vector3.UnitY,"Y"),(Vector3.UnitZ,"Z")})foreach(float degrees in new[]{-30f,30f})
             {
                 var pose=new StressPose($"Joint {rig.Bones[joint].Role} {name} {degrees:+0;-0}",rig.Bones[joint].Role,axis,degrees);
-                result.Add((pose,RigValidator.MeasurePose(character,rig,pose,faces,buffer,geometry.Height)));
+                result[probe++]=(pose,RigValidator.MeasurePose(character,rig,pose,faces,buffer,geometry.Height));
             }
-        }
-        return result.ToArray();
+        });
+        return result;
     }
     static bool Bad(StressResult result)=>result.ReversedTriangles>0||result.NonFiniteVertices>0||result.NonFiniteMeasurements>0||result.MaximumStretch>4||result.MinimumAreaRatio<.025f;
     static double Score(IEnumerable<StressResult> results)=>results.Sum(r=>r.ReversedTriangles+1000000d*(r.NonFiniteVertices+r.NonFiniteMeasurements)+100*Math.Max(0,r.MaximumStretch/4-1)+100*Math.Max(0,1-r.MinimumAreaRatio/.025f));

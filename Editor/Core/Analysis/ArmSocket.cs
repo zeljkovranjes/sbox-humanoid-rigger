@@ -8,6 +8,18 @@ using Vector2=System.Numerics.Vector2;
 /// depend on mesh connectivity, vertex density or closed cross sections.</summary>
 internal sealed record ArmSocket(Vector3 Armpit,Vector3 Center,Vector3 Axis,float Radius,float Length)
 {
+    /// <summary>Wrist joint, when the rig knows it; the forearm need not follow the upper arm's line.</summary>
+    internal Vector3? Wrist{get;init;}
+    /// <summary>Distance from the arm's own centerline, shoulder to elbow to a
+    /// hand's length past the wrist. Far from that line a point is not the arm,
+    /// however far along the axis it lies: for a hanging arm the legs do.</summary>
+    float FromChain(Vector3 point)
+    {
+        var elbow=Center+Axis*Length;float upper=Vector3.Distance(point,Geometry.ClosestOnSegment(point,Center,elbow));
+        var forearm=Wrist is {} wrist&&Vector3.DistanceSquared(wrist,elbow)>1e-8f?Vector3.Normalize(wrist-elbow):Axis;
+        float reach=Wrist is {} known?Vector3.Distance(known,elbow)+Radius*4:Length;
+        return Math.Min(upper,Vector3.Distance(point,Geometry.ClosestOnSegment(point,elbow,elbow+forearm*reach)));
+    }
     // Frontal occupancy retained from the measurement.
     FrontSilhouette silhouette;
     /// <summary>How much of a point belongs to the arm itself: distal of the
@@ -18,8 +30,10 @@ internal sealed record ArmSocket(Vector3 Armpit,Vector3 Center,Vector3 Axis,floa
     {
         var offset=point-Center;float along=Vector3.Dot(offset,Axis);
         // A bent forearm leaves the line of the upper arm. Everything past
-        // the upper arm is arm; only the socket region needs separating.
+        // the upper arm, and near the arm itself, is arm; only the socket
+        // region needs separating.
         float beyond=Smooth((along/Length-.7f)/.3f);
+        if(beyond>0)beyond*=1-Smooth((FromChain(point)/Radius-1.6f)/.7f);
         if(beyond>=1)return 1;
         float radial=(offset-Axis*along).Length();
         float support=Smooth((along/Radius+.6f)/1.2f)*(1-Smooth((radial/Radius-1.6f)/.7f));
@@ -60,12 +74,20 @@ internal sealed record ArmSocket(Vector3 Armpit,Vector3 Center,Vector3 Axis,floa
     {
         // Only within the arm's own thickness. A hanging arm points at the
         // floor, so the hips lie far along its axis without being any part of it.
-        var offset=point-Center;float along=Vector3.Dot(offset,Axis),radial=(offset-Axis*along).Length();
-        return Support(point)*Smooth((along/Radius-.5f)/1.5f)*(1-Smooth((radial/Radius-1.6f)/.7f));
+        float along=Vector3.Dot(point-Center,Axis);
+        return Support(point)*Smooth((along/Radius-.5f)/1.5f)*(1-Smooth((FromChain(point)/Radius-1.6f)/.7f));
     }
     /// <summary>The shoulder girdle carries the socket: neither the arm beyond
     /// it nor the flank below the armpit.</summary>
-    internal float Girdle(Vector3 point)=>(1-Smooth((Vector3.Dot(point-Center,Axis)/Radius-.5f)/1.5f))*Smooth((point.Y-Armpit.Y)/Radius+.25f);
+    /// <remarks>The girdle ends within half a radius of the socket, and on a
+    /// thick arm no farther than an eighth of the upper arm: a thick arm is not
+    /// a longer shoulder.</remarks>
+    internal float Girdle(Vector3 point)
+    {
+        float along=Vector3.Dot(point-Center,Axis);
+        float reach=Math.Min(1-Smooth((along/Radius-.5f)/1.5f),1-Smooth((along/Length-.12f)/.23f));
+        return reach*Smooth((point.Y-Armpit.Y)/Radius+.25f);
+    }
     static float Smooth(float t){t=Math.Clamp(t,0,1);return t*t*(3-2*t);}
 
     internal static ArmSocket? Measure(IEnumerable<MeshPart> meshes,Vector3 shoulder,Vector3 elbow,float centerX,float height)

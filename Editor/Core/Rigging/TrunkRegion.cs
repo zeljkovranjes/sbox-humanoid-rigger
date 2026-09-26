@@ -91,6 +91,7 @@ internal sealed class TrunkRegion
             }
             float centerX=Bone(direction<0?"Pelvis":"Chest")?.Position.X??0;
             var socket=start.StartsWith("UpperArm.")?ArmSocket.Measure(surface.Meshes,a.Position,b.Position,centerX,height):null;
+            if(socket is not null&&Bone("Hand."+start[^1..]) is {} hand)socket=socket with{Wrist=hand.Position};
             // An open sleeve or a segmented shell has no closed contour anywhere
             // along the arm. The silhouette still shows where it leaves the torso.
             if(sections.Length==0&&socket is not null)
@@ -170,15 +171,20 @@ internal sealed class TrunkRegion
     /// the arm, and a diffusion tail carry the pelvis halfway down a thigh. Every
     /// solver shares this, so a fallback cannot hand back what another settled.
     /// A trace remains so a vertex with no other bone nearby stays skinned.</summary>
+    /// <summary>A limb's share of a point, or -1 where its attachment says nothing.
+    /// A socket holds for the whole surface; the other envelopes describe the trunk only.</summary>
+    static float Share(Attachment limit,Vector3 point,bool trunk)
+    {
+        if(!trunk&&limit.Socket is null&&limit.Girdle is null&&limit.Hip is null)return -1;
+        return trunk||limit.Socket is not null?limit.Support(point):limit.Girdle?.Girdle(point)??limit.Hip!.Inner(point);
+    }
     internal void Constrain(Vector3 point,bool trunk,Span<float> claim)
     {
         claim.Fill(1);
         foreach(var limit in Attachments)
         {
-            // A socket holds for the whole surface; the other envelopes
-            // describe the trunk only.
-            if(!trunk&&limit.Socket is null&&limit.Girdle is null&&limit.Hip is null)continue;
-            float support=Math.Max(trunk||limit.Socket is not null?limit.Support(point):limit.Girdle?.Girdle(point)??limit.Hip!.Inner(point),1e-4f);
+            float share=Share(limit,point,trunk);if(share<0)continue;
+            float support=Math.Max(share,1e-4f);
             if(support<1)for(int b=0;b<claim.Length;b++)if(limit.Moving[b])claim[b]*=support;
             // Past its socket a limb is its own; the trunk lets go of it, but only
             // as far as the limb holds on. Where another rule keeps the limb off,
@@ -186,6 +192,30 @@ internal sealed class TrunkRegion
             // vertex to whichever distant bone remains.
             float beyond=Math.Min(limit.Socket?.Beyond(point)??limit.Hip?.Beyond(point)??0,support);
             if(beyond>0)for(int b=0;b<claim.Length;b++)if(Axial[b])claim[b]*=Math.Max(1-beyond,1e-4f);
+        }
+    }
+    /// <summary>Hold each limb to its share of a normalized weight row. Scaling a
+    /// claim is not enough where no bone reaches a point along the surface: the
+    /// least faint survivor then takes the row, and a clavicle allowed six
+    /// percent of a pectoral ends up with sixty. What a limb gives up passes
+    /// to its receiver, then to the axial skeleton on the trunk, or on a limb
+    /// to whichever bones remain, nearest first.</summary>
+    internal void Cap(Vector3 point,bool trunk,float[] weights,RigBone[] bones,Vector3[] ends)
+    {
+        foreach(var limit in Attachments)
+        {
+            float share=Share(limit,point,trunk);if(share<0||share>=1)continue;
+            float held=0;for(int b=0;b<weights.Length;b++)if(limit.Moving[b])held+=weights[b];
+            if(held<=share+1e-6f)continue;
+            float factor=share/held,removed=held-share;
+            for(int b=0;b<weights.Length;b++)if(limit.Moving[b])weights[b]*=factor;
+            if(limit.Receiver>=0){weights[limit.Receiver]+=removed;continue;}
+            bool Receives(int b)=>bones[b].Deform&&!limit.Moving[b]&&(!trunk||Axial[b]);
+            float total=0;for(int b=0;b<weights.Length;b++)if(Receives(b))total+=weights[b];
+            if(total>1e-6f){for(int b=0;b<weights.Length;b++)if(Receives(b))weights[b]+=removed*weights[b]/total;continue;}
+            int nearest=-1;float best=float.PositiveInfinity;
+            for(int b=0;b<weights.Length;b++)if(Receives(b)){float d=Vector3.DistanceSquared(point,Geometry.ClosestOnSegment(point,bones[b].Position,ends[b]));if(d<best){best=d;nearest=b;}}
+            if(nearest>=0)weights[nearest]+=removed;else for(int b=0;b<weights.Length;b++)if(limit.Moving[b])weights[b]/=factor;
         }
     }
     internal float Blend(Vector3 point)

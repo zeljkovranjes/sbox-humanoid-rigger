@@ -80,7 +80,11 @@ internal static class HeadWeightRepair
             }
             values[head]+=removed;candidate.Weights[p][v]=Skinning.Cleanup(values,rig.Profile.MaximumInfluences);
         }
-        var geometry=new ValidationGeometry(character,trunk:new TrunkRegion(character,rig),influenceAllowed:Allows);
+        // Guard the trunk only where the reviewed rig already keeps it: a rig
+        // that carries the closed-pose warning would otherwise see every head
+        // candidate rejected for a bleed it did not introduce.
+        var trunk=new TrunkRegion(character,rig);
+        var geometry=new ValidationGeometry(character,trunk:trunk.HasBleeding(character,rig)?null:trunk,influenceAllowed:Allows);
         candidate.Report=RigValidator.ValidateAndRepair(character,candidate,geometry);
         if(!candidate.Report.Passed||candidate.Report.StressTests.Any(p=>p.ReversedTriangles>0))
             candidate=PoseWeightRepair.Improve(character,candidate,geometry,JointCoverage.Measure(character,candidate,geometry));

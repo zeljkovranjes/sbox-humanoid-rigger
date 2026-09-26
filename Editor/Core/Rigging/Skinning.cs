@@ -56,8 +56,17 @@ public static class Skinning
                 return(Node:n,Length:length,Conductance:1/Math.Max(length,height*.001f));
             }).ToArray()).ToArray();
             var denominators=edges.Select(row=>{float sum=0;foreach(var edge in row)sum+=edge.Conductance;return sum;}).ToArray();
-            var components=useRegionSeeds?Geometry.Components(neighbors):new int[count];int componentCount=components.Max()+1;
+            // Regions give disconnected surfaces independent seeding baselines.
+            // The ordinary solve shares one, so that a tiny eye or prop close to
+            // a bone cannot suppress seeds on the head or body it belongs to.
+            var regions=Geometry.Components(neighbors);
+            var components=useRegionSeeds?regions:new int[count];int componentCount=components.Max()+1;
             var digits=SkinRegions.DetachedDigits(mesh,neighbors,rig.Anatomy);
+            // A bone lies under the skin it moves. Where a hand rests against a
+            // thigh, the thigh's surface is nearer the hand bone than its own,
+            // yet faces it: the bone is on the outside. Penalize that as the
+            // heat solve does; an open surface has no normal and is left alone.
+            var normals=SkinningNormals.ClosedSurface(mesh.Vertices,mesh.Triangles);
             var distances=new float[count][];var nearest=new float[count];
             for(int v=0;v<count;v++)
             {
@@ -69,10 +78,21 @@ public static class Skinning
                         ?float.PositiveInfinity:Vector3.Distance(p,Geometry.ClosestOnSegment(p,bones[b].Position,ends[b]));
                     if(float.IsFinite(distance) && volume.InteriorCells>0)
                         distance+=6*volume.ExteriorLength(Geometry.ClosestOnSegment(p,bones[b].Position,ends[b]),p);
+                    if(float.IsFinite(distance)&&distance>height*1e-5f&&normals[v]!=Vector3.Zero)
+                    {
+                        float alignment=Vector3.Dot(normals[v],(p-Geometry.ClosestOnSegment(p,bones[b].Position,ends[b]))/distance);
+                        if(float.IsFinite(alignment))distance/=Math.Max(.05f,(1+alignment)*.5f);
+                    }
                     distances[v][b]=distance;nearest[v]=Math.Min(nearest[v],distance);
                 }
             }
             var geodesic=new float[bones.Length][];
+            // A shell that lies a cloth's thickness outside the body, such as
+            // separate shorts, is farther from every bone than the skin beneath
+            // and never seeds under the shared baseline. Left unreached, it
+            // would fall back to straight-line distance and take a hand's weight
+            // onto the hip it rests against. Seed such orphans on their own.
+            bool[]? orphan=null;
             void TraceBone(int b)
             {
                 var values=Enumerable.Repeat(float.PositiveInfinity,count).ToArray();var queue=new PriorityQueue<int,float>();
@@ -89,12 +109,20 @@ public static class Skinning
                 var segment=ends[b]-bones[b].Position;float segmentLength=segment.LengthSquared();
                 int Stretch(int v)=>segmentLength<=0?0:Math.Clamp((int)(Vector3.Dot(mesh.Vertices[v]-bones[b].Position,segment)/segmentLength*stretches),0,stretches-1);
                 var surfaceDistance=Enumerable.Repeat(float.PositiveInfinity,componentCount*stretches).ToArray();
+                var own=orphan is null?null:Enumerable.Repeat(float.PositiveInfinity,(regions.Max()+1)*stretches).ToArray();
                 // Only eligible points define a region's minimum; a closer point
                 // owned by another bone can otherwise eliminate every valid seed.
                 for(int v=0;v<count;v++)if(!useRegionSeeds||distances[v][b]<=nearest[v]+band)
-                {int at=components[v]*stretches+Stretch(v);surfaceDistance[at]=Math.Min(surfaceDistance[at],distances[v][b]);}
-                for(int v=0;v<count;v++)if(float.IsFinite(distances[v][b])&&distances[v][b]<=nearest[v]+band && distances[v][b]<=surfaceDistance[components[v]*stretches+Stretch(v)]+height*.015f)
-                {values[v]=distances[v][b];queue.Enqueue(v,values[v]);}
+                {
+                    int at=components[v]*stretches+Stretch(v);surfaceDistance[at]=Math.Min(surfaceDistance[at],distances[v][b]);
+                    if(own is not null&&orphan![regions[v]]&&distances[v][b]<=nearest[v]+band){int mine=regions[v]*stretches+Stretch(v);own[mine]=Math.Min(own[mine],distances[v][b]);}
+                }
+                for(int v=0;v<count;v++)
+                {
+                    float baseline=own is not null&&orphan![regions[v]]?own[regions[v]*stretches+Stretch(v)]:surfaceDistance[components[v]*stretches+Stretch(v)];
+                    if(float.IsFinite(distances[v][b])&&distances[v][b]<=nearest[v]+band && distances[v][b]<=baseline+height*.015f)
+                    {values[v]=distances[v][b];queue.Enqueue(v,values[v]);}
+                }
                 while(queue.TryDequeue(out var v,out float distance))
                 {
                     if(distance>values[v])continue;
@@ -108,6 +136,16 @@ public static class Skinning
             }
             int traceWorkers=RigWork.WorkerCount(count);
             RigWork.For(bones.Length,traceWorkers,TraceBone);
+            if(!useRegionSeeds)
+            {
+                var reachedRegion=new bool[regions.Max()+1];
+                for(int v=0;v<count;v++)if(!reachedRegion[regions[v]]&&geodesic.Any(g=>float.IsFinite(g[v])))reachedRegion[regions[v]]=true;
+                if(reachedRegion.Any(r=>!r))
+                {
+                    orphan=reachedRegion.Select(r=>!r).ToArray();
+                    RigWork.For(bones.Length,traceWorkers,TraceBone);
+                }
+            }
             graph=new(edges,denominators,distances,nearest,geodesic);cache.Fields.Add(useRegionSeeds,graph);
             }
             var claim=new float[bones.Length];var fade=new float[bones.Length];
@@ -129,7 +167,10 @@ public static class Skinning
                     // a gap between disconnected fingers or nearby limbs.
                     if(useLocalityPrior&&reached)
                         distance=.5f*distance+.5f*Vector3.Distance(p,Geometry.ClosestOnSegment(p,bones[b].Position,ends[b]));
-                    weights[b]=MathF.Exp(-(distance-graph.Nearest[v])/Math.Max(height*.03f,.001f));
+                    // The nearest distance carries the exterior penalty; a surface route
+                    // can be shorter. A bone reached that easily is simply fully present,
+                    // never infinitely so.
+                    weights[b]=MathF.Exp(-Math.Max(0,distance-graph.Nearest[v])/Math.Max(height*.03f,.001f));
                 }
                 // Apply the measured limb boundaries here, so later repairs start
                 // from anatomy rather than having to restore it.
@@ -150,6 +191,7 @@ public static class Skinning
                 var total=weights.Sum();
                 if(total<1e-30f) throw new InvalidOperationException($"Mesh '{mesh.Name}' is too far from the body to skin safely.");
                 for(int b=0;b<bones.Length;b++) weights[b]/=total;
+                cache.Trunk.Cap(p,cache.TrunkVertices[v],weights,bones,ends);
                 seeds[v]=weights;field[v]=(float[])weights.Clone();
             }
             var nextField=Enumerable.Range(0,count).Select(_=>new float[bones.Length]).ToArray();

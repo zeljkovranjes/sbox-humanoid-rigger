@@ -11,6 +11,7 @@ public static class Skinning
         internal readonly ImportedCharacter Surface;
         internal readonly VolumeEvidence Volume;
         internal readonly Dictionary<bool,GraphField> Fields=[];
+        internal SurfaceHugging? Hugging;
         // Measured limb boundaries for this skeleton, and trunk membership in
         // the merged vertex order.
         internal TrunkRegion? Trunk;internal bool[]? TrunkVertices;internal SkinningLocality? Locality;
@@ -220,7 +221,7 @@ public static class Skinning
             }
             result[part]=field.Select(w=>Cleanup(Limit(w,rig.Profile.MaximumInfluences),rig.Profile.MaximumInfluences)).ToArray();
         }
-        return result;
+        return (cache.Hugging??=new SurfaceHugging(character,rig)).Apply(result,bones.Length,rig.Profile.MaximumInfluences);
     }
     /// <summary>Dropping the weakest influence outright leaves a step in the
     /// field. Across the short edges of a dense mesh even a few percent is a

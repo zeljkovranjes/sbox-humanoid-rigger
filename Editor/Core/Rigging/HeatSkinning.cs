@@ -12,7 +12,7 @@ public static class HeatSkinning
     internal static IEnumerable<Influence[][][]> Candidates(ImportedCharacter character,GeneratedRig rig,bool normalPrior=false,TrunkRegion? trunk=null)
     {
 
-        float height=character.AnatomicalHeight,tolerance=height*1e-5f;
+        float height=character.AnatomicalHeight,tolerance=height*1e-5f;SurfaceHugging? hugging=null;
         var mesh=Geometry.Merge(character.Meshes);var adjacency=Geometry.Neighbors(mesh,tolerance);
         var digits=SkinRegions.DetachedDigits(mesh,adjacency,rig.Anatomy);
         var hands=new Dictionary<string,bool[]>();
@@ -172,7 +172,7 @@ public static class HeatSkinning
             return weights;
         }).ToArray();
         if(result.SelectMany(p=>p).Any(w=>w.Length==0))continue;
-        produced=true;yield return result;
+        produced=true;yield return (hugging??=new SurfaceHugging(character,rig)).Apply(result,rig.Bones.Length,rig.Profile.MaximumInfluences);
         }
         if(!produced)throw new InvalidOperationException("Heat solve found a mesh region without a local bone influence. Check its landmarks.");
     }

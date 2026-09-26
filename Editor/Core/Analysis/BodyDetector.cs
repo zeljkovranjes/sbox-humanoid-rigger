@@ -125,17 +125,18 @@ public static class BodyDetector
             }
             if(side=="L") a.Pose=downward<15 ? CharacterPose.TPose : downward<38 ? CharacterPose.APose1 : downward<58 ? CharacterPose.APose2 : CharacterPose.Relaxed;
             // Proportions only seed the search. Where the silhouette shows the arm
-            // leaving the torso, the joint follows that measured socket instead.
-            // The elbow and wrist searches below keep the proportional seed they
-            // were tuned with: they find their own sections, the wrist fit also
-            // reads the elbow, and a seed moved with the shoulder can settle in a
-            // neighboring bottleneck.
-            var joint=shoulder;
+            // leaving the torso, the joint follows that measured socket instead,
+            // and the elbow and wrist are sought along the arm from there.
             if(ArmSocket.Measure(character.Meshes.Where(m=>m.Kind==MeshKind.Body),shoulder,Vector3.Lerp(shoulder,hand,.46f),center,h) is {} socket)
-            {sockets[R("UpperArm")]=socket.Center;joint=Adopt(shoulder,socket.Center);}
+            {sockets[R("UpperArm")]=socket.Center;shoulder=Adopt(shoulder,socket.Center);}
+            // The chest joint carries the shoulders; on a stubby figure the
+            // proportional estimate can sit above them, leaving the shoulder
+            // level of the torso to the spine below and tearing it when the
+            // chest turns. Keep it below the measured shoulders.
+            if(a["Chest"].Y>shoulder.Y-h*.02f){var chest=a.Points["Chest"];a.Set("Chest",chest.Position with{Y=shoulder.Y-h*.02f},chest.Confidence);}
             var wrist=Vector3.Lerp(hand,shoulder,.11f);
-            var clavicle=Vector3.Lerp(a["Chest"],joint,.35f);clavicle.Y=joint.Y+h*.015f;
-            a.Set(R("Clavicle"),clavicle,.7f);a.Set(R("UpperArm"),joint,.7f);
+            var clavicle=Vector3.Lerp(a["Chest"],shoulder,.35f);clavicle.Y=shoulder.Y+h*.015f;
+            a.Set(R("Clavicle"),clavicle,.7f);a.Set(R("UpperArm"),shoulder,.7f);
             var armSurface=downward>58 ? sideBody : body;
             a.Set(R("LowerArm"),RefineCenter(armSurface,Vector3.Lerp(shoulder,wrist,.52f),wrist-shoulder,h*.045f),.6f);
             a.Set(R("Hand"),RefineCenter(armSurface,wrist,wrist-shoulder,h*.035f),.65f);
@@ -193,9 +194,12 @@ public static class BodyDetector
             }
             if(Math.Abs(head.Position.Z-a["Neck"].Z)>h*.1f)
                 a.Set("Head",new Vector3(center,head.Position.Y,a["Neck"].Z),head.Confidence);
-            // A large skull needs an envelope spanning its measured volume. A
-            // terminal point at the head joint makes its crown look like a remote
-            // region and lets the neck retain otherwise unrelated head weights.
+        }
+        {
+            // Every skull needs an envelope spanning its measured volume, not
+            // only one with ears or hair above it. A terminal point at the head
+            // joint makes the crown look like a remote region, lets the neck keep
+            // unrelated head weights, and leaves a detached skull nothing to seed.
             var end=a["Head"];end.Y=max.Y-(max.Y-end.Y)*.1f;
             end=a.Volume.Refine(end,a.Height*.025f);
             if(a.Volume.Contains(end)&&end.Y>a["Head"].Y)a.HeadEnd=end;

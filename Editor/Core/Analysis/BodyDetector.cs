@@ -99,9 +99,9 @@ public static class BodyDetector
         // landmarks derive from the shoulder, and sparse hands are sensitive to
         // shifts far smaller than any visible difference. Adopt it as they diverge.
         Vector3 Adopt(Vector3 estimate,Vector3 socket)=>Vector3.Lerp(estimate,socket,TrunkRegion.Smooth((Vector3.Distance(estimate,socket)/h-.01f)/.015f));
+        var arms=new Dictionary<string,(Vector3 Shoulder,Vector3 Hand,float Downward,Vector3[] SideBody,ArmSocket? Socket)>();
         foreach(var (side,sign) in new[]{("L",1f),("R",-1f)})
         {
-            string R(string role)=>role+"."+side;
             var upper=body.Where(p=>p.Y>min.Y+h*.4f&&p.Y<min.Y+h*.86f).ToArray();
             float sideWidth=Quantile(upper.Select(p=>(p.X-center)*sign),.99f);
             float sideThreshold=Math.Min(h*.14f,sideWidth*.65f);
@@ -127,8 +127,17 @@ public static class BodyDetector
             // Proportions only seed the search. Where the silhouette shows the arm
             // leaving the torso, the joint follows that measured socket instead,
             // and the elbow and wrist are sought along the arm from there.
-            if(ArmSocket.Measure(character.Meshes.Where(m=>m.Kind==MeshKind.Body),shoulder,Vector3.Lerp(shoulder,hand,.46f),center,h) is {} socket)
-            {sockets[R("UpperArm")]=socket.Center;shoulder=Adopt(shoulder,socket.Center);}
+            arms[side]=(shoulder,hand,downward,sideBody,ArmSocket.Measure(character.Meshes.Where(m=>m.Kind==MeshKind.Body),shoulder,Vector3.Lerp(shoulder,hand,.46f),center,h));
+        }
+        {
+            var (left,right)=ArmSocket.Level(arms["L"].Socket,arms["R"].Socket,Vector3.Lerp(arms["L"].Shoulder,arms["L"].Hand,.46f),Vector3.Lerp(arms["R"].Shoulder,arms["R"].Hand,.46f),h);
+            arms["L"]=arms["L"] with{Socket=left};arms["R"]=arms["R"] with{Socket=right};
+        }
+        foreach(var (side,sign) in new[]{("L",1f),("R",-1f)})
+        {
+            string R(string role)=>role+"."+side;
+            var (shoulder,hand,downward,sideBody,socket)=arms[side];
+            if(socket is not null){sockets[R("UpperArm")]=socket.Center;shoulder=Adopt(shoulder,socket.Center);}
             // The chest joint carries the shoulders; on a stubby figure the
             // proportional estimate can sit above them, leaving the shoulder
             // level of the torso to the spine below and tearing it when the

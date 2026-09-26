@@ -35,8 +35,9 @@ internal sealed class TrunkRegion
                 if(span>0)support=Math.Min(support,Smooth((Side*(point.X-CenterX)-socket+span)/span));
             }
             // Trunk points behind a limb socket must not inherit its motion
-            // just because they share its height. Respect the measured limb axis.
-            if(Side!=0)support=Math.Min(support,Smooth(along/Radius+.5f));
+            // just because they share its height. Respect the measured limb axis;
+            // the girdle over a lowered arm's socket is not behind it.
+            if(Side!=0)support=Math.Min(support,Smooth((Girdle?.Forward(point)??along)/Radius+.5f));
             return support;
         }
     }
@@ -71,6 +72,12 @@ internal sealed class TrunkRegion
             }
         }
         var surface=new ImportedCharacter{Meshes=character.Meshes.Where(m=>m.Kind is MeshKind.Body or MeshKind.Clothing).Select(m=>m with{Kind=MeshKind.Body}).ToArray()};
+        var armSockets=new Dictionary<string,ArmSocket?>();
+        {
+            float chestX=Bone("Chest")?.Position.X??0;
+            ArmSocket? Arm(string side){var a=Bone("UpperArm."+side);var b=Bone("LowerArm."+side);return a is null||b is null||Vector3.Distance(a.Position,b.Position)<height*.005f?null:ArmSocket.Measure(surface.Meshes,a.Position,b.Position,chestX,height);}
+            (armSockets["L"],armSockets["R"])=ArmSocket.Level(Arm("L"),Arm("R"),Bone("LowerArm.L")?.Position??default,Bone("LowerArm.R")?.Position??default,height);
+        }
         foreach(var (start,end,root,direction) in new[]{
             ("UpperArm.L","LowerArm.L","Clavicle.L",1f),("UpperArm.R","LowerArm.R","Clavicle.R",1f),
             ("UpperLeg.L","LowerLeg.L","UpperLeg.L",-1f),("UpperLeg.R","LowerLeg.R","UpperLeg.R",-1f),
@@ -90,7 +97,7 @@ internal sealed class TrunkRegion
                 if(sections.Length>0)break;
             }
             float centerX=Bone(direction<0?"Pelvis":"Chest")?.Position.X??0;
-            var socket=start.StartsWith("UpperArm.")?ArmSocket.Measure(surface.Meshes,a.Position,b.Position,centerX,height):null;
+            var socket=start.StartsWith("UpperArm.")?armSockets[start[^1..]]:null;
             if(socket is not null&&Bone("Hand."+start[^1..]) is {} hand)socket=socket with{Wrist=hand.Position};
             // An open sleeve or a segmented shell has no closed contour anywhere
             // along the arm. The silhouette still shows where it leaves the torso.
@@ -176,7 +183,8 @@ internal sealed class TrunkRegion
     static float Share(Attachment limit,Vector3 point,bool trunk)
     {
         if(!trunk&&limit.Socket is null&&limit.Girdle is null&&limit.Hip is null)return -1;
-        return trunk||limit.Socket is not null?limit.Support(point):limit.Girdle?.Girdle(point)??limit.Hip!.Inner(point);
+        if(limit.Socket is not null)return limit.Socket.Support(point,detached:!trunk);
+        return trunk?limit.Support(point):limit.Girdle?.Girdle(point)??limit.Hip!.Inner(point);
     }
     internal void Constrain(Vector3 point,bool trunk,Span<float> claim)
     {

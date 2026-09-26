@@ -88,8 +88,35 @@ public static class HandDetector
                 anatomy.HandEnds[side]=Geometry.Mean(palm.OrderByDescending(p=>Vector3.DistanceSquared(p,reviewedWrist)).Take(Math.Max(4,palm.Length/5)));
             }
         }
+        // A hand shell of its own that the palm search does not recognize, a
+        // mitten or a claw, still ends where it ends: at the far point of its
+        // shell along the forearm. A shell that carries the chest is the body.
+        if(!anatomy.HandEnds.ContainsKey(side)&&surface.Vertices.Length>0)
+        {
+            var components=Geometry.Components(neighbors);
+            int Nearest(Vector3 point){int best=0;float nearest=float.PositiveInfinity;for(int v=0;v<surface.Vertices.Length;v++){float d=Vector3.DistanceSquared(surface.Vertices[v],point);if(d<nearest){nearest=d;best=v;}}return best;}
+            int shell=components[Nearest(reviewedWrist)];
+            if(shell!=components[Nearest(anatomy["Chest"])])
+            {
+                Vector3? tip=null;float farthest=height*.02f;
+                for(int v=0;v<surface.Vertices.Length;v++)if(components[v]==shell){float d=Vector3.Dot(surface.Vertices[v]-reviewedWrist,axis);if(d>farthest){farthest=d;tip=surface.Vertices[v];}}
+                if(tip is {} end)anatomy.HandEnds[side]=end;
+            }
+        }
+        // A lowered hand hangs beside a thigh, and a fused surface joins them.
+        // What lies nearer a leg's own axis than the forearm's line is the leg,
+        // however it reaches the wrist; a thigh is no finger.
+        var legs=new List<(Vector3 From,Vector3 To)>();
+        foreach(string s in new[]{"L","R"})foreach(var (from,to) in new[]{("UpperLeg.","LowerLeg."),("LowerLeg.","Foot.")})
+            if(anatomy.Points.ContainsKey(from+s)&&anatomy.Points.ContainsKey(to+s))legs.Add((anatomy[from+s],anatomy[to+s]));
+        bool Leg(Vector3 p)
+        {
+            float own=Vector3.Distance(p,Geometry.ClosestOnSegment(p,wrist,wrist+axis*height*.3f));
+            foreach(var (from,to) in legs)if(Vector3.Distance(p,Geometry.ClosestOnSegment(p,from,to))<own)return true;
+            return false;
+        }
         var parts=new[]{(Mesh:surface,Neighbors:neighbors)};
-        var vertices=surface.Vertices.Where((p,i)=>region[i]&&Vector3.Dot(p-wrist,axis)>-height*.025f&&Vector3.Distance(p,wrist)<cropRadius).ToArray();
+        var vertices=surface.Vertices.Where((p,i)=>region[i]&&!Leg(p)&&Vector3.Dot(p-wrist,axis)>-height*.025f&&Vector3.Distance(p,wrist)<cropRadius).ToArray();
         if(vertices.Length<12){anatomy.Warnings.Add($"{side} hand has insufficient geometry for finger reconstruction.");return false;}
         // Estimate palm spread in the plane perpendicular to the forearm. A
         // fixed world axis confuses palm-down hands with edge-on hands.
@@ -114,7 +141,7 @@ public static class HandDetector
             foreach(var part in parts)
             {
                 var seen=new bool[part.Mesh.Vertices.Length];
-                bool Allowed(int i){var p=part.Mesh.Vertices[i];return region[i]&&Vector3.Dot(p-wrist,axis)>reach*fraction&&Vector3.Distance(p,wrist)<cropRadius;}
+                bool Allowed(int i){var p=part.Mesh.Vertices[i];return region[i]&&Vector3.Dot(p-wrist,axis)>reach*fraction&&Vector3.Distance(p,wrist)<cropRadius&&!Leg(p);}
                 for(int i=0;i<seen.Length;i++)
                 {
                     if(seen[i]||!Allowed(i))continue;

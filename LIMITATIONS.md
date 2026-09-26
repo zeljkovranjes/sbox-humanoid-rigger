@@ -6,6 +6,8 @@ Things the rigger does not do, or does only under conditions. Read this before r
 
 Shoulders and hips are measured from the character's silhouette: the armpit is the apex of the open space below the arm, the crotch the top of the space between the legs. Both need that space to exist. Import a T-pose or A-pose where you can. When an arm hangs against the body, part of the flank still follows it, and the rig reports that as a warning rather than an error, because it has already passed every deformation test. Thighs that touch are handled from their cross sections instead, so they need no gap.
 
+Shoulders are taken to be level. When a pouch, a holster or a hand on the hip fills the space under one lowered arm, that side takes its shoulder height from the other. A hand resting against a thigh is separated from it by the leg's own axis, so it needs no gap either.
+
 ## Dense characters
 
 A typical character rigs in a few seconds. A character of 100,000+ vertices takes a few minutes, most of it in the per-joint deformation checks. Rigs with unresolved validation errors remain blocked from saving.

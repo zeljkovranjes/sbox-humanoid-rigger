@@ -94,7 +94,7 @@ public static class RigValidator
             {
                 var transforms=geometry?.Transforms(rig,specifications[i])??Deformation.BoneTransforms(rig,Deformation.JointRotations(rig,specifications[i]));
                 Deformation.ApplyTransforms(character,rig,transforms.Positions,transforms.Rotations,buffer);
-                tests[i]=MeasureDeformed(character,rig,specifications[i].Name,faces,buffer,transforms.Rotations,height);
+                tests[i]=MeasureDeformed(character,rig,specifications[i].Name,faces,buffer,transforms.Rotations,height,Still(rig,transforms,height));
             }
         }
         // Poses read the same frozen weights and write separate buffers. Keep
@@ -119,16 +119,33 @@ public static class RigValidator
         Deformation.ApplyTransforms(character,rig,transforms.Positions,rotations,deformed);
         return MeasureDeformed(character,rig,pose.Name,faces,deformed,rotations,height);
     }
-    internal static StressResult MeasureDeformed(ImportedCharacter character,GeneratedRig rig,string name,BindTriangle[][] faces,Vector3[][] deformed,System.Numerics.Quaternion[] rotations,float height)
+    /// <summary>Bones a pose leaves at their bind transform. A vertex weighted
+    /// only to those does not move, and a face of such vertices keeps its bind
+    /// shape exactly: it can neither stretch nor reverse.</summary>
+    static bool[] Still(GeneratedRig rig,(Vector3[] Positions,System.Numerics.Quaternion[] Rotations) transforms,float height)
+        =>rig.Bones.Select((bone,b)=>transforms.Rotations[b]==System.Numerics.Quaternion.Identity&&Vector3.Distance(transforms.Positions[b],bone.Position)<=height*1e-6f).ToArray();
+    internal static StressResult MeasureDeformed(ImportedCharacter character,GeneratedRig rig,string name,BindTriangle[][] faces,Vector3[][] deformed,System.Numerics.Quaternion[] rotations,float height,bool[]? still=null)
     {
         float stretch=1,minArea=1,sourceEdge=0,deformedEdge=0;int nonFinite=0,invalidMeasurements=0;
         int reversed=0;double surfaceArea=0,reversedArea=0;
         for(int p=0;p<character.Meshes.Length;p++)
         {
             var mesh=character.Meshes[p];var dst=deformed[p];nonFinite+=dst.Count(v=>!Geometry.Finite(v));
+            var weights=rig.Weights[p];
+            bool Moves(int v){foreach(var w in weights[v])if(!still![w.Bone])return true;return false;}
             foreach(var face in faces[p])
             {
                 var i=face.A;var j=face.B;var k=face.C;
+                if(still is not null&&!Moves(i)&&!Moves(j)&&!Moves(k))
+                {
+                    // Keep the surface total in its original order; the face
+                    // contributes an area ratio of exactly one and no stretch.
+                    // Its measurements can still be invalid, and that is reported.
+                    if(!float.IsFinite(face.Area))invalidMeasurements++;
+                    else if(face.Area>height*height*1e-10f)surfaceArea+=face.Area;
+                    for(int edge=0;edge<3;edge++)if(!float.IsFinite(face.Edge(edge).Length))invalidMeasurements++;
+                    continue;
+                }
                 var normal=face.Normal;
                 var posedNormal=Vector3.Cross(dst[j]-dst[i],dst[k]-dst[i]);
                 float area=face.Area,posedArea=posedNormal.Length();

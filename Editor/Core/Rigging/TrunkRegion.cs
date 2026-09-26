@@ -210,12 +210,22 @@ internal sealed class TrunkRegion
             float factor=share/held,removed=held-share;
             for(int b=0;b<weights.Length;b++)if(limit.Moving[b])weights[b]*=factor;
             if(limit.Receiver>=0){weights[limit.Receiver]+=removed;continue;}
+            // On the trunk the excess goes to the axial bones nearest the point,
+            // softly, on the seeding scale. What the point already holds of them
+            // came from far-off seeds: at an armpit that is the lower spine,
+            // which stays still when the chest turns and tears the crease.
             bool Receives(int b)=>bones[b].Deform&&!limit.Moving[b]&&(!trunk||Axial[b]);
-            float total=0;for(int b=0;b<weights.Length;b++)if(Receives(b))total+=weights[b];
-            if(total>1e-6f){for(int b=0;b<weights.Length;b++)if(Receives(b))weights[b]+=removed*weights[b]/total;continue;}
-            int nearest=-1;float best=float.PositiveInfinity;
-            for(int b=0;b<weights.Length;b++)if(Receives(b)){float d=Vector3.DistanceSquared(point,Geometry.ClosestOnSegment(point,bones[b].Position,ends[b]));if(d<best){best=d;nearest=b;}}
-            if(nearest>=0)weights[nearest]+=removed;else for(int b=0;b<weights.Length;b++)if(limit.Moving[b])weights[b]/=factor;
+            Span<float> gain=stackalloc float[weights.Length];int nearest=-1;float best=float.PositiveInfinity;
+            for(int b=0;b<weights.Length;b++)
+            {
+                gain[b]=Receives(b)?Vector3.Distance(point,Geometry.ClosestOnSegment(point,bones[b].Position,ends[b])):float.PositiveInfinity;
+                if(gain[b]<best){best=gain[b];nearest=b;}
+            }
+            if(nearest<0){for(int b=0;b<weights.Length;b++)if(limit.Moving[b])weights[b]/=factor;continue;}
+            float total=0;
+            for(int b=0;b<weights.Length;b++)if(Receives(b)){gain[b]=trunk?MathF.Exp(-(gain[b]-best)/(height*.03f)):weights[b];total+=gain[b];}
+            if(total<=1e-6f){gain.Clear();gain[nearest]=1;total=1;}
+            for(int b=0;b<weights.Length;b++)if(Receives(b))weights[b]+=removed*gain[b]/total;
         }
     }
     internal float Blend(Vector3 point)

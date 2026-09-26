@@ -35,9 +35,8 @@ internal sealed class TrunkRegion
                 if(span>0)support=Math.Min(support,Smooth((Side*(point.X-CenterX)-socket+span)/span));
             }
             // Trunk points behind a limb socket must not inherit its motion
-            // just because they share its height. Respect the measured limb axis;
-            // the girdle over a lowered arm's socket is not behind it.
-            if(Side!=0)support=Math.Min(support,Smooth((Girdle?.Forward(point)??along)/Radius+.5f));
+            // just because they share its height. Respect the measured limb axis.
+            if(Side!=0)support=Math.Min(support,Smooth(along/Radius+.5f));
             return support;
         }
     }

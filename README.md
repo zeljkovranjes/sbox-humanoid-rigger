@@ -19,7 +19,7 @@ Add the library to your s&box project and open **View → Humanoid Rigger**.
 5. Test the bones in the preview. Go back to adjust points if needed.
 6. Choose the output formats, filename and folder, then save.
 
-Automatic detection is experimental. Characters need two arms and two legs; review uncertain landmarks and deformation warnings before saving.
+Automatic detection is experimental. Characters need two arms and two legs; review uncertain landmarks and deformation warnings before saving. See [LIMITATIONS.md](LIMITATIONS.md) for what the rigger does not do.
 
 Obj exports the mesh and materials; Fbx, Gltf and Glb also retain the rig and skin weights. Keep external Gltf buffers/textures and Obj material files beside their model. Compressed glTF extensions and separate UV transforms per material texture must be baked before import.
 

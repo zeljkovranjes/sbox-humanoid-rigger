@@ -67,10 +67,10 @@ public static class Skinning
             // yet faces it: the bone is on the outside. Penalize that as the
             // heat solve does; an open surface has no normal and is left alone.
             var normals=SkinningNormals.ClosedSurface(mesh.Vertices,mesh.Triangles);
-            var distances=new float[count][];var nearest=new float[count];
+            var distances=new float[count][];var nearest=new float[count];var facing=new float[count][];
             for(int v=0;v<count;v++)
             {
-                distances[v]=new float[bones.Length];nearest[v]=float.PositiveInfinity;
+                distances[v]=new float[bones.Length];nearest[v]=float.PositiveInfinity;facing[v]=new float[bones.Length];Array.Fill(facing[v],1f);
                 for(int b=0;b<bones.Length;b++)
                 {
                     var p=mesh.Vertices[v];var role=ReferenceFitting.Owner(rig,b);
@@ -81,7 +81,7 @@ public static class Skinning
                     if(float.IsFinite(distance)&&distance>height*1e-5f&&normals[v]!=Vector3.Zero)
                     {
                         float alignment=Vector3.Dot(normals[v],(p-Geometry.ClosestOnSegment(p,bones[b].Position,ends[b]))/distance);
-                        if(float.IsFinite(alignment))distance/=Math.Max(.05f,(1+alignment)*.5f);
+                        if(float.IsFinite(alignment)){facing[v][b]=1/Math.Max(.05f,(1+alignment)*.5f);distance*=facing[v][b];}
                     }
                     distances[v][b]=distance;nearest[v]=Math.Min(nearest[v],distance);
                 }
@@ -128,7 +128,10 @@ public static class Skinning
                     if(distance>values[v])continue;
                     foreach(var edge in edges[v])
                     {
-                        int n=edge.Node;float next=distance+edge.Length;
+                        // A field crossing onto surface that faces its bone from the
+                        // outside, a hoodie side fused to its sleeve or a thigh under
+                        // a hand, pays what its seeds pay.
+                        int n=edge.Node;float next=distance+edge.Length*facing[n][b];
                         if(next<values[n]){values[n]=next;queue.Enqueue(n,next);}
                     }
                 }

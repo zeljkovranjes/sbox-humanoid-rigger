@@ -11,6 +11,18 @@ public static class SurfaceOrientation
         =>Measure(bindNormal,posedNormal,a,b,c,rotations).Alignment;
     public static (float Alignment,float VolumeRatio) Measure(Vector3 bindNormal,Vector3 posedNormal,Influence[] a,Influence[] b,Influence[] c,Quaternion[] rotations)
     {
+        var transported=Transported(bindNormal,a,b,c,rotations);
+        float denominator=posedNormal.Length()*transported.Length();
+        float dot=Vector3.Dot(posedNormal,transported);
+        float alignment=denominator>0&&float.IsFinite(denominator)?Math.Clamp(dot/denominator,-1,1):float.NaN;
+        // This is the signed volume ratio of an infinitesimal prism whose vertex
+        // weights extend along the bind normal. It includes collapse, not just tilt.
+        return(alignment,dot/bindNormal.LengthSquared());
+    }
+    /// <summary>The bind normal carried by the face's own skin: where the
+    /// deformed face should point, with the bind area still in its length.</summary>
+    public static Vector3 Transported(Vector3 bindNormal,Influence[] a,Influence[] b,Influence[] c,Quaternion[] rotations)
+    {
         // A triangle's corners nearly always share their bones. Carry the normal
         // once per bone; each influence then adds the same value in the same order.
         const int Capacity=16;
@@ -28,11 +40,6 @@ public static class SurfaceOrientation
             }
             transported+=normal*(w.Weight/3);
         }
-        float denominator=posedNormal.Length()*transported.Length();
-        float dot=Vector3.Dot(posedNormal,transported);
-        float alignment=denominator>0&&float.IsFinite(denominator)?Math.Clamp(dot/denominator,-1,1):float.NaN;
-        // This is the signed volume ratio of an infinitesimal prism whose vertex
-        // weights extend along the bind normal. It includes collapse, not just tilt.
-        return(alignment,dot/bindNormal.LengthSquared());
+        return transported;
     }
 }

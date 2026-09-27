@@ -27,7 +27,7 @@ internal static class JointCoverage
         });
         return result;
     }
-    static bool Bad(StressResult result)=>result.ReversedTriangles>0||result.NonFiniteVertices>0||result.NonFiniteMeasurements>0||result.MaximumStretch>4||result.MinimumAreaRatio<.025f;
+    internal static bool Bad(StressResult result)=>result.ReversedTriangles>0||result.NonFiniteVertices>0||result.NonFiniteMeasurements>0||result.MaximumStretch>4||result.MinimumAreaRatio<.025f;
     static double Score(IEnumerable<StressResult> results)=>results.Sum(r=>r.ReversedTriangles+1000000d*(r.NonFiniteVertices+r.NonFiniteMeasurements)+100*Math.Max(0,r.MaximumStretch/4-1)+100*Math.Max(0,1-r.MinimumAreaRatio/.025f));
     internal static GeneratedRig Improve(ImportedCharacter character,GeneratedRig rig,ValidationGeometry? geometry=null)
     {

@@ -200,6 +200,17 @@ public static class Skinning
             }
             var nextField=Enumerable.Range(0,count).Select(_=>new float[bones.Length]).ToArray();
             int workers=RigWork.WorkerCount(count);
+            // Each pass keeps a share of the seed, so the blend reaches about
+            // 1/(1-share) edges however many passes run. On a sculpt whose
+            // edges are a millimetre that is no distance at all, and the pores
+            // and wrinkles the distances see fold every tiny face; the blend
+            // then reaches a hundredth of the height instead. Coarser meshes
+            // keep the two-edge blend they always had.
+            double edgeTotal=0;long edgeCount=0;
+            foreach(var row in graph.Edges)foreach(var edge in row){edgeTotal+=edge.Length;edgeCount++;}
+            float hops=edgeCount==0?0:(float)(height*.01/(edgeTotal/edgeCount));
+            float neighborShare=Math.Max(.55f,1-1/Math.Max(hops,1)),seedShare=1-neighborShare;
+            int iterations=Math.Max(12,(int)MathF.Ceiling(hops*4));
             void Diffuse(int worker)
             {
                 for(int v=worker*count/workers;v<(worker+1)*count/workers;v++)
@@ -208,11 +219,11 @@ public static class Skinning
                     {
                         float sum=0,denominator=graph.Denominators[v];
                         foreach(var edge in graph.Edges[v])sum+=field[edge.Node][b]*edge.Conductance;
-                        nextField[v][b]=.45f*seeds[v][b]+.55f*(denominator>0 ? sum/denominator : field[v][b]);
+                        nextField[v][b]=seedShare*seeds[v][b]+neighborShare*(denominator>0 ? sum/denominator : field[v][b]);
                     }
                 }
             }
-            for(int iteration=0;iteration<12;iteration++)
+            for(int iteration=0;iteration<iterations;iteration++)
             {
                 // Fixed vertex ranges share read-only input, then join before
                 // swapping fields. Each vertex keeps its original summation order.

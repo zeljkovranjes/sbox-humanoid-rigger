@@ -124,8 +124,30 @@ public static class RigValidator
     /// shape exactly: it can neither stretch nor reverse.</summary>
     static bool[] Still(GeneratedRig rig,(Vector3[] Positions,System.Numerics.Quaternion[] Rotations) transforms,float height)
         =>rig.Bones.Select((bone,b)=>transforms.Rotations[b]==System.Numerics.Quaternion.Identity&&Vector3.Distance(transforms.Positions[b],bone.Position)<=height*1e-6f).ToArray();
+    /// <summary>The scale a deformation is judged at. A sculpt's faces are a
+    /// millimetre across, and the pores and wrinkles that give a bodybuilder
+    /// his skin fold one by one under any blend of two bones: nothing a viewer
+    /// could see. Faces finer than the patch are judged together, patch by
+    /// patch, on the same tests; coarser meshes are judged face by face.</summary>
+    internal const float PatchScale=.006f;
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ImportedCharacter,object> fineness=new();
+    /// <summary>Whether the character as a whole is finer than the patch. A
+    /// head or a hand judged on its own has small faces on any character.</summary>
+    internal static bool Fine(ImportedCharacter character,float height)
+    {
+        if(fineness.TryGetValue(character,out var known))return (bool)known;
+        double total=0;long count=0;
+        foreach(var mesh in character.Meshes)for(int t=0;t<mesh.Triangles.Length;t+=3)
+        {
+            float length=Vector3.Distance(mesh.Vertices[mesh.Triangles[t]],mesh.Vertices[mesh.Triangles[t+1]]);
+            if(float.IsFinite(length)){total+=length;count++;}
+        }
+        bool fine=count>0&&total/count<height*PatchScale*.4f;
+        fineness.AddOrUpdate(character,fine);return fine;
+    }
     internal static StressResult MeasureDeformed(ImportedCharacter character,GeneratedRig rig,string name,BindTriangle[][] faces,Vector3[][] deformed,System.Numerics.Quaternion[] rotations,float height,bool[]? still=null)
     {
+        if(Fine(character,height))return MeasurePatches(character,rig,name,faces,deformed,rotations,height,still);
         float stretch=1,minArea=1,sourceEdge=0,deformedEdge=0;int nonFinite=0,invalidMeasurements=0;
         int reversed=0;double surfaceArea=0,reversedArea=0;
         for(int p=0;p<character.Meshes.Length;p++)
@@ -167,6 +189,59 @@ public static class RigValidator
                     if(!float.IsFinite(ratio)){invalidMeasurements++;continue;}
                     if(ratio>stretch){stretch=ratio;sourceEdge=length;deformedEdge=posedLength;}
                 }
+            }
+        }
+        return new(name,stretch,minArea,nonFinite,sourceEdge,deformedEdge,invalidMeasurements,reversed,surfaceArea>0?(float)(reversedArea/surfaceArea):0);
+    }
+    sealed class Patch{public Vector3 Posed,Transported;public double BindArea,PosedArea,BindEdges,PosedEdges;}
+    static StressResult MeasurePatches(ImportedCharacter character,GeneratedRig rig,string name,BindTriangle[][] faces,Vector3[][] deformed,System.Numerics.Quaternion[] rotations,float height,bool[]? still)
+    {
+        float cell=height*PatchScale;int nonFinite=0,invalidMeasurements=0;double surfaceArea=0;
+        var patches=new Dictionary<(long,long,long),Patch>();
+        for(int p=0;p<character.Meshes.Length;p++)
+        {
+            var mesh=character.Meshes[p];var src=mesh.Vertices;var dst=deformed[p];nonFinite+=dst.Count(v=>!Geometry.Finite(v));
+            var weights=rig.Weights[p];
+            bool Moves(int v){foreach(var w in weights[v])if(!still![w.Bone])return true;return false;}
+            foreach(var face in faces[p])
+            {
+                var i=face.A;var j=face.B;var k=face.C;
+                if(!float.IsFinite(face.Area)){invalidMeasurements++;continue;}
+                if(face.Area<=height*height*1e-10f)continue;
+                if(still is not null&&!Moves(i)&&!Moves(j)&&!Moves(k)){surfaceArea+=face.Area;continue;}
+                var posedNormal=Vector3.Cross(dst[j]-dst[i],dst[k]-dst[i]);float posedArea=posedNormal.Length();
+                if(!float.IsFinite(posedArea)){invalidMeasurements++;continue;}
+                var center=(src[i]+src[j]+src[k])/3;
+                var key=((long)MathF.Floor(center.X/cell),(long)MathF.Floor(center.Y/cell),(long)MathF.Floor(center.Z/cell));
+                if(!patches.TryGetValue(key,out var patch))patches[key]=patch=new();
+                patch.Posed+=posedNormal;patch.Transported+=SurfaceOrientation.Transported(face.Normal,weights[i],weights[j],weights[k],rotations);
+                patch.BindArea+=face.Area;patch.PosedArea+=posedArea;surfaceArea+=face.Area;
+                for(int edge=0;edge<3;edge++)
+                {
+                    var (a,b,length)=face.Edge(edge);float posedLength=Vector3.Distance(dst[a],dst[b]);
+                    if(!float.IsFinite(length)||!float.IsFinite(posedLength)){invalidMeasurements++;continue;}
+                    if(length<=height*1e-6f)continue;
+                    patch.BindEdges+=length*(double)length;patch.PosedEdges+=posedLength*(double)posedLength;
+                }
+            }
+        }
+        float stretch=1,minArea=1,sourceEdge=0,deformedEdge=0;int reversed=0;double reversedArea=0;
+        foreach(var patch in patches.Values)
+        {
+            if(patch.BindArea>0)
+            {
+                float ratio=(float)(patch.PosedArea/patch.BindArea);
+                if(float.IsFinite(ratio))minArea=Math.Min(minArea,ratio);else invalidMeasurements++;
+            }
+            float denominator=patch.Posed.Length()*patch.Transported.Length();
+            float alignment=denominator>0&&float.IsFinite(denominator)?Math.Clamp(Vector3.Dot(patch.Posed,patch.Transported)/denominator,-1,1):float.NaN;
+            if(float.IsNaN(alignment))invalidMeasurements++;
+            else if(alignment<SurfaceOrientation.ReversalLimit){reversed++;reversedArea+=patch.BindArea;}
+            if(patch.BindEdges>0)
+            {
+                float edgeRatio=(float)Math.Sqrt(patch.PosedEdges/patch.BindEdges);
+                if(!float.IsFinite(edgeRatio))invalidMeasurements++;
+                else if(edgeRatio>stretch){stretch=edgeRatio;sourceEdge=(float)Math.Sqrt(patch.BindEdges);deformedEdge=(float)Math.Sqrt(patch.PosedEdges);}
             }
         }
         return new(name,stretch,minArea,nonFinite,sourceEdge,deformedEdge,invalidMeasurements,reversed,surfaceArea>0?(float)(reversedArea/surfaceArea):0);

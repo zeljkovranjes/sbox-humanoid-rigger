@@ -6,7 +6,7 @@ using Vector3=System.Numerics.Vector3;
 /// must not pull the face; disconnected cranial surfaces retain their topology.</summary>
 internal static class HeadWeightRepair
 {
-    internal static GeneratedRig Improve(ImportedCharacter character,GeneratedRig rig)
+    internal static GeneratedRig Improve(ImportedCharacter character,GeneratedRig rig,Action<string>? diagnostic=null)
     {
         if(!rig.Report.Passed)return rig;
         int head=Array.FindIndex(rig.Bones,b=>b.Role=="Head"),neck=Array.FindIndex(rig.Bones,b=>b.Role=="Neck");
@@ -19,6 +19,7 @@ internal static class HeadWeightRepair
         for(int b=head+1;b<skull.Length;b++)skull[b]=rig.Bones[b].Parent>=0&&skull[rig.Bones[b].Parent];
         var axial=new bool[rig.Bones.Length];for(int b=neck;b>=0;b=rig.Bones[b].Parent)axial[b]=true;
         float transitionHeight=Math.Max(section.Radius*.5f,height*.005f);
+        diagnostic?.Invoke($"neck joint {rig.Bones[neck].Position/height} section center {section.Center/height} radius {section.Radius/height:F3}H transition {transitionHeight/height:F3}H head joint {rig.Bones[head].Position/height}");
         var mesh=Geometry.Merge(character.Meshes);var graph=Geometry.Neighbors(mesh,height*1e-5f);
         for(int v=0;v<graph.Length;v++)graph[v].RemoveAll(n=>
         {
@@ -78,7 +79,10 @@ internal static class HeadWeightRepair
                 else if(w.Bone==neck){values[neck]+=w.Weight*(1-blend);removed+=w.Weight*blend;}
                 else removed+=w.Weight;
             }
-            values[head]+=removed;candidate.Weights[p][v]=Skinning.Cleanup(values,rig.Profile.MaximumInfluences);
+            // What the torso held goes where the neck goes: to the neck at the
+            // section and to the head above the transition. Handing it to the
+            // head at the section itself steps the head weight across the plane.
+            values[neck]+=removed*(1-blend);values[head]+=removed*blend;candidate.Weights[p][v]=Skinning.Cleanup(values,rig.Profile.MaximumInfluences);
         }
         // Guard the trunk only where the reviewed rig already keeps it: a rig
         // that carries the closed-pose warning would otherwise see every head
@@ -86,10 +90,22 @@ internal static class HeadWeightRepair
         var trunk=new TrunkRegion(character,rig);
         var geometry=new ValidationGeometry(character,trunk:trunk.HasBleeding(character,rig)?null:trunk,influenceAllowed:Allows);
         candidate.Report=RigValidator.ValidateAndRepair(character,candidate,geometry);
-        if(!candidate.Report.Passed||candidate.Report.StressTests.Any(p=>p.ReversedTriangles>0))
+        // A fold the rig already carries elsewhere is no reason to leave the
+        // face on the torso; only a fold the head candidate adds is.
+        if(!candidate.Report.Passed||candidate.Report.StressTests.Zip(rig.Report.StressTests).Any(p=>p.First.Pose!=p.Second.Pose||p.First.ReversedTriangles>p.Second.ReversedTriangles))
             candidate=PoseWeightRepair.Improve(character,candidate,geometry,JointCoverage.Measure(character,candidate,geometry));
         if(candidate.Report.Passed)candidate=SeamWeightRepair.Improve(character,JointCoverage.Improve(character,candidate,geometry),geometry);
-        if(candidate.Report.Passed&&!Bleeds(candidate))
+        diagnostic?.Invoke($"candidate: passed {candidate.Report.Passed} bleeds {Bleeds(candidate)} selected {selected.Sum(p=>p.Count(x=>x))} folds {candidate.Report.StressTests.Sum(p=>p.ReversedTriangles)} vs {rig.Report.StressTests.Sum(p=>p.ReversedTriangles)} errors {string.Join(" | ",candidate.Report.Issues.Where(i=>i.Error).Select(i=>i.Code+": "+i.Message))}");
+        // A joint probe the reviewed rig fails as well is no verdict on the
+        // head; the candidate carries that report on, with the face fixed.
+        bool acceptable=candidate.Report.Passed;
+        if(!acceptable&&candidate.Report.Issues.Where(i=>i.Error).All(i=>i.Code=="joint-deformation"))
+        {
+            var before=JointCoverage.Measure(character,rig,geometry).Where(c=>JointCoverage.Bad(c.Result)).Select(c=>c.Pose.Name).ToHashSet();
+            acceptable=JointCoverage.Measure(character,candidate,geometry).Where(c=>JointCoverage.Bad(c.Result)).All(c=>before.Contains(c.Pose.Name));
+            diagnostic?.Invoke($"probes: candidate fails only probes the rig fails too: {acceptable} (rig fails {before.Count})");
+        }
+        if(acceptable&&!Bleeds(candidate))
         {
             candidate.Report.Repairs+=rig.Report.Repairs;candidate.Report.RepairPasses+=rig.Report.RepairPasses+1;return candidate;
         }

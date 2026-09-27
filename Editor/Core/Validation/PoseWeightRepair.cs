@@ -20,7 +20,12 @@ internal static class PoseWeightRepair
         // dozen folds, a couple of hundred on the hardest characters. Thousands
         // mean the weights are wrong at a scale a local fit does not mend, and
         // trying takes tens of minutes on a dense mesh before being rejected.
-        if(initial.StressTests.Sum(p=>(long)p.ReversedTriangles)>MaximumFolds)return rig;
+        // A fine character is judged patch by patch, and a patch holds many
+        // faces; the fit's cost is in faces. Count the faces its folds cover.
+        long folds=RigValidator.Fine(character,character.AnatomicalHeight)
+            ?(long)Math.Round(initial.StressTests.Sum(p=>(double)p.ReversedAreaFraction)*character.Meshes.Sum(m=>m.Triangles.Length/3))
+            :initial.StressTests.Sum(p=>(long)p.ReversedTriangles);
+        if(folds>MaximumFolds)return rig;
         var trunk=geometry.Trunk;
         if(trunk is not null&&trunk.HasBleeding(character,rig))return rig;
         if(trunk is null)

@@ -10,7 +10,7 @@ Shoulders are taken to be level. When a pouch, a holster or a hand on the hip fi
 
 ## Dense characters
 
-A typical character rigs in a few seconds. A character of 100,000+ vertices takes a few minutes, most of it in the per-joint deformation checks. A sculpt whose faces are finer than about six thousandths of its height is judged in patches of that size rather than face by face, since a fold across a single millimetre face is not something a viewer can see. Very dense sculpts with deep creases, such as a bodybuilder at half a million vertices, can still fail the joint checks at the deltoid, wrist and neck. Rigs with unresolved validation errors remain blocked from saving.
+A typical character rigs in a few seconds. A character of 100,000+ vertices takes a few minutes, most of it in the per-joint deformation checks. A sculpt whose faces are finer than about six thousandths of its height is judged in patches of that size rather than face by face, since a fold across a single millimetre face is not something a viewer can see. A sculpt of half a million vertices takes about seven minutes. Rigs with unresolved validation errors remain blocked from saving.
 
 ## Citizen profiles
 

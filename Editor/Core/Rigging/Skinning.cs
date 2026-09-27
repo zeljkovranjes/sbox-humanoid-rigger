@@ -236,8 +236,12 @@ public static class Skinning
     }
     /// <summary>Dropping the weakest influence outright leaves a step in the
     /// field. Across the short edges of a dense mesh even a few percent is a
-    /// severe stretch once a limb moves. Lower every weight by the largest
-    /// omitted one instead, so an influence reaches zero before it is removed.</summary>
+    /// severe stretch once a limb moves. The last influence kept gives way to
+    /// the first omitted instead, reaching zero as that one rises to meet it,
+    /// while every other kept weight stands. Lowering every weight by the
+    /// omitted one, as this once did, left a pectoral with six near-equal
+    /// influences only their differences: a smooth field became jumps of a
+    /// tenth between neighbouring vertices once renormalized.</summary>
     internal static float[] Limit(float[] weights,int maximum)
     {
         if(maximum<=0||weights.Length<=maximum)return weights;
@@ -251,8 +255,12 @@ public static class Skinning
             strongest[at]=value;count=Math.Min(count+1,maximum+1);
         }
         if(count<=maximum||strongest[0]<=strongest[maximum])return weights;
-        float omitted=strongest[maximum];
-        for(int b=0;b<weights.Length;b++)weights[b]=Math.Max(0,weights[b]-omitted);
+        float omitted=strongest[maximum],last=strongest[maximum-1];bool lowered=false;
+        for(int b=0;b<weights.Length;b++)
+        {
+            if(!float.IsFinite(weights[b])||weights[b]<=omitted)weights[b]=0;
+            else if(!lowered&&weights[b]==last){weights[b]=last-omitted;lowered=true;}
+        }
         return weights;
     }
     public static Influence[] Cleanup(IEnumerable<Influence> source,int boneCount,int maximum)

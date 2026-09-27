@@ -60,7 +60,9 @@ internal static class HeadWeightRepair
         for(int p=0;p<selected.Length;offset+=selected[p++].Length)
             if(character.Meshes[p].Kind is MeshKind.Body or MeshKind.Clothing or MeshKind.Hair)
                 for(int v=0;v<selected[p].Length;v++){int c=components[offset+v];selected[p][v]=cranial[c]&&!below[c];}
-        bool Allows(int p,int v,int b)=>!selected[p][v]||skull[b]||axial[b]&&character.Meshes[p].Vertices[v].Y<origin.Y+transitionHeight;
+        // Within the transition any bone may linger: a limb's small tail on the
+        // trapezius fades out there instead of stopping at the neck plane.
+        bool Allows(int p,int v,int b)=>!selected[p][v]||skull[b]||character.Meshes[p].Vertices[v].Y<origin.Y+transitionHeight;
         bool Bleeds(GeneratedRig candidate)
         {
             for(int p=0;p<selected.Length;p++)for(int v=0;v<selected[p].Length;v++)if(selected[p][v])
@@ -76,8 +78,7 @@ internal static class HeadWeightRepair
             foreach(var w in rig.Weights[p][v])
             {
                 if(skull[w.Bone])values[w.Bone]+=w.Weight;
-                else if(w.Bone==neck){values[neck]+=w.Weight*(1-blend);removed+=w.Weight*blend;}
-                else removed+=w.Weight;
+                else {values[w.Bone]+=w.Weight*(1-blend);removed+=w.Weight*blend;}
             }
             // What the torso held goes where the neck goes: to the neck at the
             // section and to the head above the transition. Handing it to the

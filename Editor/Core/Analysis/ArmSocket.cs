@@ -10,6 +10,10 @@ internal sealed record ArmSocket(Vector3 Armpit,Vector3 Center,Vector3 Axis,floa
 {
     /// <summary>Wrist joint, when the rig knows it; the forearm need not follow the upper arm's line.</summary>
     internal Vector3? Wrist{get;init;}
+    /// <summary>The upper arm's own radius along its shaft, when the rig has
+    /// measured it. The armpit is the narrowest place an arm leaves the torso;
+    /// the shoulder it hangs from is as broad as the arm itself.</summary>
+    internal float Girth{get;init;}
     float Height{get;init;}
     /// <summary>How far from its centerline the arm past the shoulder still
     /// reaches, in units of its own radius. A hand is never thinner than a
@@ -65,7 +69,11 @@ internal sealed record ArmSocket(Vector3 Armpit,Vector3 Center,Vector3 Axis,floa
         if(beyond>0&&!detached)beyond*=1-Smooth((Reach(point)-1.6f)/.7f);
         if(beyond>=1)return 1;
         float radial=(offset-Axis*along).Length();
-        float support=Smooth((Forward(point)/Radius+.6f)/1.2f)*(1-Smooth((radial/Radius-1.6f)/.7f));
+        // The trunk gives way to the arm over the breadth of the shoulder, a
+        // radius and a fifth wide, measured from the arm's own girth where a
+        // bodybuilder's deltoid dwarfs his armpit.
+        float breadth=Math.Max(Radius,Girth);
+        float support=Smooth((Forward(point)/breadth+.6f)/1.2f)*(1-Smooth((radial/Radius-1.6f)/.7f));
         support+=(1-support)*beyond;
         if(support<=0)return 0;
         // The open space below the arm is a wedge with its apex at the armpit,

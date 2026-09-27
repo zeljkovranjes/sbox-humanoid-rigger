@@ -156,7 +156,7 @@ public static class HeatSkinning
             return Skinning.Cleanup(w.Select(weight=>(float)Math.Max(0,weight-threshold)).ToArray(),rig.Profile.MaximumInfluences);
         }).ToArray();
         if(nodeWeights.Any(w=>w.Length==0))continue;
-        int offset=0;var result=character.Meshes.Select(m=>
+        int offset=0;var result=character.Meshes.Select((m,p)=>
         {
             var weights=Enumerable.Range(offset,m.Vertices.Length).Select(v=>(Influence[])nodeWeights[mapping[v]].Clone()).ToArray();offset+=m.Vertices.Length;
             if(!pruneFirst&&m.Kind!=MeshKind.Accessory)for(int v=0;v<weights.Length;v++)
@@ -168,6 +168,16 @@ public static class HeatSkinning
                     float t=limit==height*.25f?Math.Clamp((distance/height-.18f)/.06f,0,1):Math.Clamp((distance/limit-.72f)/.24f,0,1);
                     return w with{Weight=w.Weight*(1-t*t*(3-2*t))};
                 }),rig.Bones.Length,rig.Profile.MaximumInfluences);
+            }
+            // A claim scales a source; it does not bound what diffusion brings.
+            // The measured limb shares hold for this candidate as they do for
+            // the envelope's, or a pectoral keeps a third of a clavicle and
+            // folds when the shoulder lifts.
+            if(bounded&&trunk is not null)for(int v=0;v<weights.Length;v++)
+            {
+                var row=new float[rig.Bones.Length];foreach(var w in weights[v])row[w.Bone]=w.Weight;
+                trunk.Cap(m.Vertices[v],trunk.Vertices[p][v],row,rig.Bones,ends);
+                weights[v]=Skinning.Cleanup(Skinning.Limit(row,rig.Profile.MaximumInfluences),rig.Profile.MaximumInfluences);
             }
             return weights;
         }).ToArray();

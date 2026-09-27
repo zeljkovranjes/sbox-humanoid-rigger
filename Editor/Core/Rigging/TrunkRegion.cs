@@ -110,6 +110,7 @@ internal sealed class TrunkRegion
             // Coincident body/clothing contours share a logical cut; source
             // surfaces and their original vertex ordering remain separate.
             float radius=sections.Where(s=>Vector3.Distance(s.Center,section.Center)<section.Radius*.5f).Max(s=>s.Radius);
+            if(socket is not null)socket=socket with{Girth=radius};
             var moving=new bool[rig.Bones.Length];
             for(int i=0;i<moving.Length;i++)moving[i]=rig.Bones[i].Role==root||rig.Bones[i].Role==start||rig.Bones[i].Parent>=0&&moving[rig.Bones[i].Parent];
             float side=start=="Neck"?0:Math.Sign(a.Position.X-centerX);

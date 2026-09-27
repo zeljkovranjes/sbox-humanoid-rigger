@@ -193,27 +193,54 @@ public static class RigValidator
         }
         return new(name,stretch,minArea,nonFinite,sourceEdge,deformedEdge,invalidMeasurements,reversed,surfaceArea>0?(float)(reversedArea/surfaceArea):0);
     }
-    sealed class Patch{public Vector3 Posed,Transported;public double BindArea,PosedArea,BindEdges,PosedEdges;}
+    struct Patch{public Vector3 Posed,Transported;public double BindArea,PosedArea,BindEdges,PosedEdges;}
+    sealed class PatchMap{public int[][] Index=[];public int Count;}
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ImportedCharacter,PatchMap> patchIndex=new();
+    /// <summary>The patch each face belongs to, by its bind centroid; the bind
+    /// surface does not change between poses.</summary>
+    static PatchMap Patches(ImportedCharacter character,BindTriangle[][] faces,float height)
+    {
+        if(patchIndex.TryGetValue(character,out var known)&&known.Index.Length==faces.Length&&known.Index.Select((part,p)=>part.Length==faces[p].Length).All(x=>x))return known;
+        // Two skins meet within a cell at an armpit or an elbow crease, and
+        // one moves with the arm while the other stays: their summed normals
+        // would disagree although neither folds. Faces facing different ways
+        // form patches of their own.
+        float cell=height*PatchScale;var ids=new Dictionary<(long,long,long,int),int>();
+        var index=new int[faces.Length][];
+        for(int p=0;p<faces.Length;p++)
+        {
+            var src=character.Meshes[p].Vertices;index[p]=new int[faces[p].Length];
+            for(int f=0;f<faces[p].Length;f++)
+            {
+                var face=faces[p][f];var center=(src[face.A]+src[face.B]+src[face.C])/3;
+                var n=face.Normal;float ax=Math.Abs(n.X),ay=Math.Abs(n.Y),az=Math.Abs(n.Z);
+                int facing=ax>=ay&&ax>=az?(n.X<0?0:1):ay>=az?(n.Y<0?2:3):(n.Z<0?4:5);
+                var key=((long)MathF.Floor(center.X/cell),(long)MathF.Floor(center.Y/cell),(long)MathF.Floor(center.Z/cell),facing);
+                if(!ids.TryGetValue(key,out int id))ids[key]=id=ids.Count;
+                index[p][f]=id;
+            }
+        }
+        var result=new PatchMap{Index=index,Count=ids.Count};patchIndex.AddOrUpdate(character,result);return result;
+    }
     static StressResult MeasurePatches(ImportedCharacter character,GeneratedRig rig,string name,BindTriangle[][] faces,Vector3[][] deformed,System.Numerics.Quaternion[] rotations,float height,bool[]? still)
     {
-        float cell=height*PatchScale;int nonFinite=0,invalidMeasurements=0;double surfaceArea=0;
-        var patches=new Dictionary<(long,long,long),Patch>();
+        int nonFinite=0,invalidMeasurements=0;double surfaceArea=0;
+        var map=Patches(character,faces,height);var index=map.Index;var patches=new Patch[map.Count];
         for(int p=0;p<character.Meshes.Length;p++)
         {
             var mesh=character.Meshes[p];var src=mesh.Vertices;var dst=deformed[p];nonFinite+=dst.Count(v=>!Geometry.Finite(v));
             var weights=rig.Weights[p];
             bool Moves(int v){foreach(var w in weights[v])if(!still![w.Bone])return true;return false;}
-            foreach(var face in faces[p])
+            var ownIndex=index[p];
+            for(int f=0;f<faces[p].Length;f++)
             {
-                var i=face.A;var j=face.B;var k=face.C;
+                var face=faces[p][f];var i=face.A;var j=face.B;var k=face.C;
                 if(!float.IsFinite(face.Area)){invalidMeasurements++;continue;}
                 if(face.Area<=height*height*1e-10f)continue;
                 if(still is not null&&!Moves(i)&&!Moves(j)&&!Moves(k)){surfaceArea+=face.Area;continue;}
                 var posedNormal=Vector3.Cross(dst[j]-dst[i],dst[k]-dst[i]);float posedArea=posedNormal.Length();
                 if(!float.IsFinite(posedArea)){invalidMeasurements++;continue;}
-                var center=(src[i]+src[j]+src[k])/3;
-                var key=((long)MathF.Floor(center.X/cell),(long)MathF.Floor(center.Y/cell),(long)MathF.Floor(center.Z/cell));
-                if(!patches.TryGetValue(key,out var patch))patches[key]=patch=new();
+                ref var patch=ref patches[ownIndex[f]];
                 patch.Posed+=posedNormal;patch.Transported+=SurfaceOrientation.Transported(face.Normal,weights[i],weights[j],weights[k],rotations);
                 patch.BindArea+=face.Area;patch.PosedArea+=posedArea;surfaceArea+=face.Area;
                 for(int edge=0;edge<3;edge++)
@@ -226,8 +253,9 @@ public static class RigValidator
             }
         }
         float stretch=1,minArea=1,sourceEdge=0,deformedEdge=0;int reversed=0;double reversedArea=0;
-        foreach(var patch in patches.Values)
+        foreach(var patch in patches)
         {
+            if(patch.BindArea<=0&&patch.BindEdges<=0)continue;
             if(patch.BindArea>0)
             {
                 float ratio=(float)(patch.PosedArea/patch.BindArea);

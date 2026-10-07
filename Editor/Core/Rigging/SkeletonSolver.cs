@@ -13,7 +13,11 @@ public static class SkeletonSolver
         // Establish cranial ownership before seam fitting. Otherwise that fit
         // can spend its correction budget accommodating erroneous face weights.
         var cranial=HeadWeightRepair.Improve(character,rig);
-        return ReferenceEquals(cranial,rig)?SeamWeightRepair.Improve(character,JointCoverage.Improve(character,rig)):cranial;
+        var solved=ReferenceEquals(cranial,rig)?SeamWeightRepair.Improve(character,JointCoverage.Improve(character,rig)):cranial;
+        // Reference rigs take the stock skin where it fits; the stock joint profiles are the fallback.
+        // Joints the stock skin could not be copied to fall back to the stock joint profiles.
+        var transferred=SkinTransfer.Apply(character,solved,out var kept);
+        return JointBlend.Apply(character,transferred,kept);
     }
     static GeneratedRig FitWithHandPrior(ImportedCharacter character,Anatomy anatomy,RigProfile profile)
     {
@@ -209,6 +213,23 @@ public static class RigGeometry
             children=canonical![bone.Role].Select(d=>rig.Bones.FirstOrDefault(b=>b.Role==d.Role)).Where(b=>b is not null).ToArray()!;
         }
         if(children.Length==0&&AnatomicalEnd(rig.Anatomy,bone.Role) is {} terminal)return terminal;
+        // Reference twist bones carry the limb but have no children. As points, distance skinning drew
+        // each limb boundary halfway between twist bones (a quarter of the way up the thigh and shin), so
+        // the lower shin followed the foot and the lower thigh followed the shin. A twist bone spans its
+        // limb up to the next twist bone or joint along it, as the stock skin does.
+        if(children.Length==0&&bone.Role.StartsWith("Reference:")&&bone.Name.Contains("twist")&&bone.Parent>=0)
+        {
+            var limb=rig.Bones[bone.Parent];
+            var along=rig.Bones.Where((b,i)=>i!=index&&b.Parent==bone.Parent&&(b.Name.Contains("twist")||!b.Role.StartsWith("Reference:"))).Select(b=>b.Position).ToList();
+            var start=limb.Position;
+            var axis=along.Concat(new[]{bone.Position}).Select(p=>p-start).OrderByDescending(v=>v.LengthSquared()).First();
+            if(axis.LengthSquared()>1e-8f)
+            {
+                axis=Vector3.Normalize(axis);float at=Vector3.Dot(bone.Position-start,axis);
+                var next=along.Where(p=>Vector3.Dot(p-start,axis)>at+1e-3f).OrderBy(p=>Vector3.Dot(p-start,axis)).ToArray();
+                if(next.Length>0)return next[0];
+            }
+        }
         if(bone.Role.StartsWith("Hand."))
         {
             string side=bone.Role[^1..];

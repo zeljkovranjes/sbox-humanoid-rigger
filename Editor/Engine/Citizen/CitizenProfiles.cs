@@ -19,7 +19,7 @@ internal static class CitizenProfiles
         string source=File.ReadAllText(asset.AbsolutePath);
         string settings=ReferenceModelDoc.Read(source,p=>File.ReadAllText(AssetSystem.FindByPath(p)?.AbsolutePath??throw new IOException("Missing reference prefab: "+p)));
         string fbx=Path.Combine(Path.GetDirectoryName(asset.AbsolutePath),Path.GetFileNameWithoutExtension(path)+"_REF.fbx");
-        var weighted=ReferenceSkin.WeightedBones(File.ReadAllBytes(fbx));
+        var skin=File.ReadAllBytes(fbx);var weighted=ReferenceSkin.WeightedBones(skin);
         var order=new List<int>();
         void Visit(int index)
         {
@@ -36,6 +36,6 @@ internal static class CitizenProfiles
             return new RigBone("",boneName,order.IndexOf(model.GetBoneParent(i)),new Vec(t.Position.y,t.Position.z,t.Position.x)*2.54f,
                 Quat.Normalize(inverseBasis*new Quat(q.x,q.y,q.z,q.w)),weighted.Contains(boneName));
         }).ToArray();
-        return ReferenceArmature.Create("reference:"+path,name,path,bones,settings,ReferenceModelDoc.Scale(settings));
+        return ReferenceArmature.Create("reference:"+path,name,path,bones,settings,ReferenceModelDoc.Scale(settings),ReferenceSkin.JointProfiles(skin),skin);
     }
 }

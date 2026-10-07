@@ -11,6 +11,11 @@ public sealed class ReferenceArmature
     public string ModelDoc {get;init;}="";
     public float ModelScale {get;init;}=1;
     public RigBone[] Bones {get;init;}=[];
+    /// <summary>The stock skin's knee, ankle and elbow weight sharing (empty for references saved before it).</summary>
+    public JointProfile[] JointProfiles {get;init;}=[];
+    /// <summary>The stock skinned mesh, read from the installed model when the profile loads. Not saved:
+    /// it is large and always available from the installation.</summary>
+    [System.Text.Json.Serialization.JsonIgnore] public ReferenceSurface? Surface {get;init;}
     public void Validate(BoneDefinition[] definitions)
     {
         if(string.IsNullOrWhiteSpace(ModelPath)||!float.IsFinite(ModelScale)||ModelScale<=0||Bones.Length!=definitions.Length)
@@ -24,12 +29,13 @@ public sealed class ReferenceArmature
         }
         if(!Bones.Any(b=>b.Parent<0))throw new FormatException("The reference has no root.");
     }
-    public static RigProfile Create(string id,string name,string modelPath,RigBone[] bones,string modelDoc,float scale)
+    public static RigProfile Create(string id,string name,string modelPath,RigBone[] bones,string modelDoc,float scale,JointProfile[]? jointProfiles=null,byte[]? skin=null)
     {
         // The canonical name map supplies semantics, never the armature itself.
         var names=Profiles.BuiltIn.Single(p=>p.Id=="sbox-human").Bones.ToDictionary(b=>b.Name,b=>b.Role,StringComparer.OrdinalIgnoreCase);
         var mapped=bones.Select(b=>b with{Role=names.GetValueOrDefault(b.Name,b.Name=="root_IK"?"Root":"Reference:"+b.Name)}).ToArray();
-        var reference=new ReferenceArmature{ModelPath=modelPath,Bones=mapped,ModelDoc=modelDoc,ModelScale=scale};
+        var reference=new ReferenceArmature{ModelPath=modelPath,Bones=mapped,ModelDoc=modelDoc,ModelScale=scale,JointProfiles=jointProfiles??[],
+            Surface=skin is null?null:ReferenceSkin.Surface(skin,mapped)};
         var profile=new RigProfile{Id=id,Name=name,Reference=reference,Bones=mapped.Select(b=>new BoneDefinition(b.Role,b.Name,b.Parent<0?null:mapped[b.Parent].Role,true,b.Deform)).ToArray()};
         profile.Validate();return profile;
     }

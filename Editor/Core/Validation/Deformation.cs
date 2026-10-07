@@ -100,14 +100,33 @@ public static class Deformation
             }
         }
     }
+    /// <summary>Reference joint helpers (kneecap, elbow): childless helpers on the lower limb's joint,
+    /// beside its twist bone. Their shipped constraint turns them half way through the joint.</summary>
+    internal static bool[] JointHelpers(GeneratedRig rig)
+    {
+        var result=new bool[rig.Bones.Length];
+        if(rig.Profile.Reference is null)return result;
+        for(int i=0;i<rig.Bones.Length;i++)
+        {
+            var b=rig.Bones[i];
+            if(!b.Deform||!b.Role.StartsWith("Reference:")||!b.Name.Contains("helper")||b.Parent<0||rig.Bones[b.Parent].Parent<0)continue;
+            if(rig.Bones[b.Parent].Role is not ("LowerLeg.L" or "LowerLeg.R" or "LowerArm.L" or "LowerArm.R"))continue;
+            result[i]=Vector3.DistanceSquared(b.Position,rig.Bones[b.Parent].Position)<1e-6f;
+        }
+        return result;
+    }
     public static (Vector3[] Positions,Quaternion[] Rotations) BoneTransforms(GeneratedRig rig,IReadOnlyDictionary<string,Quaternion> jointRotations)
     {
         var rotations=new Quaternion[rig.Bones.Length];var positions=new Vector3[rig.Bones.Length];
+        var helpers=JointHelpers(rig);
         for(int i=0;i<rig.Bones.Length;i++)
         {
             var b=rig.Bones[i];var inherited=b.Parent<0 ? Quaternion.Identity : rotations[b.Parent];
             positions[i]=b.Parent<0 ? b.Position : positions[b.Parent]+Vector3.Transform(b.Position-rig.Bones[b.Parent].Position,inherited);
             rotations[i]=jointRotations.TryGetValue(b.Role,out var rotation) ? Quaternion.Normalize(inherited*rotation) : inherited;
+            // The shipped constraints hold the kneecap and elbow helpers half way between the
+            // upper and lower limb; pose them that way so validation sees the real crease.
+            if(helpers[i])rotations[i]=Quaternion.Normalize(Quaternion.Slerp(rotations[rig.Bones[b.Parent].Parent],rotations[b.Parent],.5f));
         }
         return (positions,rotations);
     }

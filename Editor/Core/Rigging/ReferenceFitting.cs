@@ -4,7 +4,7 @@ namespace HumanoidRigger.EditorTools.Core.Rigging;
 using Vector3=System.Numerics.Vector3;
 
 /// <summary>Fit a reference template through semantic anchors. Extra joints and
-/// controls are carried by their anatomical segment; reference frames are kept.</summary>
+/// controls are carried by their anatomical segment; reference frames are swung onto the fitted bones.</summary>
 internal static class ReferenceFitting
 {
     internal static GeneratedRig Create(Anatomy anatomy,RigProfile profile)
@@ -25,7 +25,52 @@ internal static class ReferenceFitting
             var bone=source[i];
             bones[i]=bone with{Position=anatomy.Points.TryGetValue(bone.Role,out var anchor)?anchor.Position:warp.Map(bone.Position,i),Deform=bone.Deform&&HasDigitGeometry(i)};
         }
+        // A T-posed mesh puts the arms ~50 degrees from the reference A-pose. Kept reference
+        // frames then no longer point along their own bones: retargeting has to rotate them off
+        // the reference, and the shipped helper constraints (bicep, elbow, forearm twist) read
+        // those frames and twist the skin. Swing each frame onto its fitted bone, keeping the
+        // reference roll; bones without a direction of their own ride their parent's swing.
+        var swing=new Quaternion[bones.Length];
+        for(int i=0;i<bones.Length;i++)
+        {
+            int parent=source[i].Parent;
+            swing[i]=parent>=0?swing[parent]:Quaternion.Identity;
+            if(Aim(source,i) is int child)
+                swing[i]=Swing(source[child].Position-source[i].Position,bones[child].Position-bones[i].Position);
+            bones[i]=bones[i] with{Rotation=Quaternion.Normalize(swing[i]*source[i].Rotation)};
+        }
         return new GeneratedRig{Profile=profile,Bones=bones,Anatomy=anatomy};
+    }
+    /// <summary>The child a bone points at: its farthest child, unless another long child points
+    /// elsewhere (fingers off a hand, clavicles beside the neck). Twist helpers lie along the bone.</summary>
+    static int? Aim(RigBone[] bones,int bone)
+    {
+        var children=Enumerable.Range(0,bones.Length).Where(i=>bones[i].Parent==bone).ToArray();
+        if(children.Length==0)return null;
+        int best=children.OrderByDescending(i=>Vector3.Distance(bones[i].Position,bones[bone].Position)).First();
+        var axis=bones[best].Position-bones[bone].Position;float length=axis.Length();
+        if(length<1e-4f)return null;
+        foreach(int other in children.Where(i=>i!=best))
+        {
+            var offset=bones[other].Position-bones[bone].Position;float size=offset.Length();
+            if(size>length*.6f&&Vector3.Dot(offset/size,axis/length)<.94f)return null;
+        }
+        return best;
+    }
+    /// <summary>Shortest rotation taking direction <paramref name="from"/> onto <paramref name="to"/>.</summary>
+    static Quaternion Swing(Vector3 from,Vector3 to)
+    {
+        if(from.LengthSquared()<1e-12f||to.LengthSquared()<1e-12f)return Quaternion.Identity;
+        from=Vector3.Normalize(from);to=Vector3.Normalize(to);
+        float dot=Vector3.Dot(from,to);
+        if(dot>.999999f)return Quaternion.Identity;
+        if(dot<-.999999f)
+        {
+            var axis=Vector3.Cross(from,Vector3.UnitX);if(axis.LengthSquared()<1e-6f)axis=Vector3.Cross(from,Vector3.UnitY);
+            return Quaternion.CreateFromAxisAngle(Vector3.Normalize(axis),MathF.PI);
+        }
+        var cross=Vector3.Cross(from,to);
+        return Quaternion.Normalize(new Quaternion(cross.X,cross.Y,cross.Z,1+dot));
     }
     internal sealed class Warp
     {

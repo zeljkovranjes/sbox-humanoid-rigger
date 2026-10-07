@@ -1,4 +1,4 @@
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Analysis;
 using Vector3=System.Numerics.Vector3;
 
 /// <summary>Extend short cap-derived chains using a resolved neighboring knuckle

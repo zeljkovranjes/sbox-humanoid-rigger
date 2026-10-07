@@ -1,6 +1,6 @@
 // Name matching shared with the Humanoid Retargeter material pipeline.
 #nullable enable annotations
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core;
 public static class TextureNames
 {
 /// <summary>Lower-case name tokens split on separators and camelCase boundaries,

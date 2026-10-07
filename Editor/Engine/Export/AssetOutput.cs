@@ -1,12 +1,7 @@
 using Editor;
 using Sandbox;
 using System.Threading.Tasks;
-namespace HumanoidRigger.Editor;
-
-public sealed record ExportResult(string[] Files)
-{
-    public string PrimaryFile=>Files.LastOrDefault(p=>p.EndsWith(".vmdl",StringComparison.OrdinalIgnoreCase))??Files.First();
-}
+namespace HumanoidRigger.EditorTools.Engine.Export;
 
 public static class AssetOutput
 {
@@ -86,4 +81,9 @@ public static class AssetOutput
             throw;
         }
     }
+}
+
+public sealed record ExportResult(string[] Files)
+{
+    public string PrimaryFile=>Files.LastOrDefault(p=>p.EndsWith(".vmdl",StringComparison.OrdinalIgnoreCase))??Files.First();
 }

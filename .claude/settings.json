@@ -1,0 +1,51 @@
+{
+  "enabledPlugins": {
+    "ponytail@ponytail": true,
+    "universal-modder@universal-modder": false
+  },
+  "extraKnownMarketplaces": {
+    "ponytail": {
+      "source": {
+        "source": "directory",
+        "path": "E:\\.sbox\\01-tools\\ponytail"
+      }
+    }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File \"E:\\.sbox\\01-tools\\_manage\\sbox-check.ps1\" -Hook pre",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File \"E:\\.sbox\\01-tools\\_manage\\sbox-check.ps1\" -Hook post",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File \"E:\\.sbox\\01-tools\\_manage\\sbox-check.ps1\" -Hook stop",
+            "type": "command",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

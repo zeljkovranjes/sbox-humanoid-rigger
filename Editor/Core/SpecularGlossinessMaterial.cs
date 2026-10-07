@@ -1,5 +1,5 @@
 #nullable enable annotations
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core;
 using Vector3=System.Numerics.Vector3;
 using Vector4=System.Numerics.Vector4;
 

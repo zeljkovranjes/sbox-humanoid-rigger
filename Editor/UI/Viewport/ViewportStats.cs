@@ -1,6 +1,6 @@
 using Sandbox;
 using Editor;
-namespace HumanoidRigger.Editor;
+namespace HumanoidRigger.EditorTools.UI.Viewport;
 
 sealed class ViewportStats : SceneCustomObject
 {

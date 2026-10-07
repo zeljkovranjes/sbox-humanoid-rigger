@@ -1,6 +1,6 @@
 using Editor;
 using Sandbox;
-namespace HumanoidRigger.Editor;
+namespace HumanoidRigger.EditorTools.UI;
 
 /// <summary>Optional anatomical input before reviewing each hand. Counts are independent of the target rig.</summary>
 public sealed class FingerCountDialog : Dialog

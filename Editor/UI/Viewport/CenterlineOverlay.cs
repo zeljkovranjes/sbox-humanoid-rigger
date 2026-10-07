@@ -1,5 +1,5 @@
 using Sandbox;
-namespace HumanoidRigger.Editor;
+namespace HumanoidRigger.EditorTools.UI.Viewport;
 
 /// <summary>A single draggable frontal line, matching the user's centerline reference.</summary>
 sealed class CenterlineOverlay : SceneCustomObject

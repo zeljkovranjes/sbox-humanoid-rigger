@@ -2,7 +2,7 @@
 // humanoid-retargeter Editor/HumanoidRetargeter/EditorPipeline.cs; adapted to rigger materials.
 using Editor;
 using Sandbox;
-namespace HumanoidRigger.Editor;
+namespace HumanoidRigger.EditorTools.Engine.Materials;
 internal static partial class MaterialAssets
 {
 	internal static IReadOnlyDictionary<int, string> GenerateVmats( SourceMaterial[] materialInfo, string directory )

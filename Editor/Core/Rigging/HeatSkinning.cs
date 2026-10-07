@@ -1,5 +1,5 @@
 #nullable enable annotations
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Rigging;
 using Vector3=System.Numerics.Vector3;
 
 /// <summary>Surface heat diffusion with exact source visibility and anatomical

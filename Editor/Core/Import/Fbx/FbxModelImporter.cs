@@ -1,7 +1,6 @@
 #nullable enable annotations
-using HumanoidRigger.Formats.Fbx;
 using System.Numerics;
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Import.Fbx;
 using Vector3 = System.Numerics.Vector3;
 using Vector2 = System.Numerics.Vector2;
 using Vector4 = System.Numerics.Vector4;

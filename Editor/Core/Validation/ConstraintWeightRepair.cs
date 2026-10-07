@@ -1,10 +1,7 @@
 using System.Numerics;
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Validation;
 using Vector3=System.Numerics.Vector3;
 
-/// <summary>Native constraint poses are supplied by the editor, not approximated
-/// with a second implementation of Source 2's constraint evaluator.</summary>
-public sealed record RigPoseSample(StressPose Pose,Vector3[] Positions,Quaternion[] Rotations);
 public static class ConstraintWeightRepair
 {
     public static StressPose[] Poses(GeneratedRig rig)
@@ -39,3 +36,7 @@ public static class ConstraintWeightRepair
         return rig;
     }
 }
+
+/// <summary>Native constraint poses are supplied by the editor, not approximated
+/// with a second implementation of Source 2's constraint evaluator.</summary>
+public sealed record RigPoseSample(StressPose Pose,Vector3[] Positions,Quaternion[] Rotations);

@@ -1,5 +1,5 @@
 #nullable enable annotations
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Export;
 
 /// <summary>Packages authored texture links without renaming or merging material slots.</summary>
 public static class TextureFiles

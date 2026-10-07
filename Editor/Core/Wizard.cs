@@ -1,8 +1,6 @@
 #nullable enable annotations
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core;
 using Vector3 = System.Numerics.Vector3;
-// Preserve previous values so editor hot reload does not reinterpret an open session.
-public enum WizardStep { Import=0,Body=1,LeftHand=2,RightHand=3,Generating=4,Validation=5,Finish=6,Centerline=7 }
 public sealed class Wizard
 {
     public WizardStep Step {get;private set;}=WizardStep.Import;
@@ -106,3 +104,6 @@ public sealed class Wizard
     }
     public void Restart(){Character=null;Anatomy=null;Rig=null;centerlineChanged=false;RequestedPose=CharacterPose.Auto;Step=WizardStep.Import;LeftFingerCount=null;RightFingerCount=null;FingerCountsConfirmed=false;Revision++;}
 }
+
+// Preserve previous values so editor hot reload does not reinterpret an open session.
+public enum WizardStep { Import=0,Body=1,LeftHand=2,RightHand=3,Generating=4,Validation=5,Finish=6,Centerline=7 }

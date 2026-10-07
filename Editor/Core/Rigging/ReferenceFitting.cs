@@ -1,6 +1,6 @@
 #nullable enable annotations
 using System.Numerics;
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Rigging;
 using Vector3=System.Numerics.Vector3;
 
 /// <summary>Fit a reference template through semantic anchors. Extra joints and

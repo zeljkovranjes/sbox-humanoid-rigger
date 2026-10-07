@@ -1,4 +1,4 @@
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Export;
 
 /// <summary>ModelDoc replaces namespace colons with underscores when importing bones.</summary>
 public static class VmdlBoneNames

@@ -1,5 +1,5 @@
 using System.Numerics;
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Rigging;
 using Vector3=System.Numerics.Vector3;
 
 /// <summary>Converts a world-space bone drag to the existing bind-space pose rotations.</summary>

@@ -1,4 +1,4 @@
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Rigging;
 using Vector3=System.Numerics.Vector3;
 
 /// <summary>An enlarged skull can be wider than the ordinary whole-body

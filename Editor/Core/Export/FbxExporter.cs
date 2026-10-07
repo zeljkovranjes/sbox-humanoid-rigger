@@ -1,7 +1,6 @@
 #nullable enable annotations
-using HumanoidRigger.Formats.Fbx;
 using System.Numerics;
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Export;
 using Vector3=System.Numerics.Vector3;
 
 /// <summary>Writes canonical mesh parts and explicit skin clusters, including bind transforms.</summary>

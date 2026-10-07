@@ -4,7 +4,7 @@
 using System;
 using System.Linq;
 
-namespace HumanoidRigger.Formats.Fbx;
+namespace HumanoidRigger.EditorTools.Core.Import.Fbx;
 
 using Vector3 = System.Numerics.Vector3;
 

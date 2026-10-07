@@ -2,11 +2,10 @@
 
 using System;
 using System.Numerics;
-using HumanoidRigger.Maths;
 
-namespace HumanoidRigger.Formats.Fbx;
+namespace HumanoidRigger.EditorTools.Core.Import.Fbx;
 
-using Vector3 = System.Numerics.Vector3; // s&box compat: shadow engine's global-namespace Vector3 (see Code/HumanoidRigger/Assembly.cs)
+using Vector3 = System.Numerics.Vector3; // s&box compat: shadow engine's global-namespace Vector3 (see Editor/Core/Assembly.cs)
 
 /// <summary>
 /// Per-node FBX local-transform evaluation: the static pivot/pre-rotation data of one Model

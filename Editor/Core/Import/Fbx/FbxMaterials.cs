@@ -1,6 +1,6 @@
 // Adapted from humanoid-retargeter Editor/HumanoidRetargeter/EditorPipeline.cs.
 #nullable disable
-namespace HumanoidRigger.Formats.Fbx;
+namespace HumanoidRigger.EditorTools.Core.Import.Fbx;
 public static class FbxMaterials
 {
     public static int[] Assign(FbxNode geometry,int[] trianglePolygons,int[] slots)

@@ -1,7 +1,5 @@
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Analysis;
 using Vector3=System.Numerics.Vector3;
-
-public sealed record HandRefinementReport(string Status,int Views,int AcceptedViews,int AdjustedJoints);
 
 /// <summary>MediaPipe is a proposal source. Mesh depth, local centers, digit topology and cross-view agreement gate every change.</summary>
 public sealed class HandPriorRefinement(IHandLandmarkModel model):IHandRefiner
@@ -91,3 +89,5 @@ public sealed class HandPriorRefinement(IHandLandmarkModel model):IHandRefiner
         return true;
     }
 }
+
+public sealed record HandRefinementReport(string Status,int Views,int AcceptedViews,int AdjustedJoints);

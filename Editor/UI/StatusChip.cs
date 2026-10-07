@@ -1,7 +1,7 @@
 using Editor;
 using Sandbox;
 
-namespace HumanoidRigger.Editor;
+namespace HumanoidRigger.EditorTools.UI;
 
 /// <summary>Copied from Humanoid Retargeter's RetargetWindow.Chip.
 /// Keep its dimensions, typography, fill and radius aligned with the suite.</summary>

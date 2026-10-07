@@ -1,5 +1,5 @@
 #nullable enable annotations
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Rigging;
 using Vector3=System.Numerics.Vector3;
 
 /// <summary>Parts that are not skin of their own. A part that lies on another

@@ -1,4 +1,4 @@
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Validation;
 
 /// <summary>Bounded pose-constrained skinning repair. Intermediate trials may be
 /// unsafe; only a completely validated candidate can replace the reviewed rig.</summary>

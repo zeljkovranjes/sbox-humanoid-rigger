@@ -1,4 +1,4 @@
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Analysis;
 using Vector3=System.Numerics.Vector3;
 
 /// <summary>Resolve up from body geometry, then an unambiguous quarter-turn

@@ -1,5 +1,5 @@
 using SkiaSharp;
-namespace HumanoidRigger.Editor;
+namespace HumanoidRigger.EditorTools.Engine.Materials;
 
 internal static partial class MaterialAssets
 {

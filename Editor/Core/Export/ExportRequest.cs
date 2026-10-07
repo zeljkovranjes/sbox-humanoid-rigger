@@ -1,8 +1,5 @@
 #nullable enable annotations
-namespace HumanoidRigger;
-
-[Flags]
-public enum ExportFormats { None=0, Fbx=1, Vmdl=2, Gltf=4, Glb=8, Obj=16, Both=Fbx|Vmdl, All=Fbx|Vmdl|Gltf|Glb|Obj }
+namespace HumanoidRigger.EditorTools.Core.Export;
 
 public sealed record ExportRequest(string FileName,string Directory,ExportFormats Formats=ExportFormats.Both)
 {
@@ -46,6 +43,9 @@ public sealed record ExportRequest(string FileName,string Directory,ExportFormat
         }
     }
 }
+
+[Flags]
+public enum ExportFormats { None=0, Fbx=1, Vmdl=2, Gltf=4, Glb=8, Obj=16, Both=Fbx|Vmdl, All=Fbx|Vmdl|Gltf|Glb|Obj }
 
 public sealed record ExportPlan(string FileName,string Directory,ExportFormats Formats,string[] Files,string? MaterialDirectory)
 {

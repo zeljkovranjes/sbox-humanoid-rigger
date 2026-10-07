@@ -1,5 +1,5 @@
 #nullable enable annotations
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Import;
 /// <summary>All pickers and file drops enter the same format-neutral import pipeline.</summary>
 public static class ModelImporter
 {
@@ -21,7 +21,7 @@ public static class ModelImporter
             var model=extension switch
             {
                 ".obj"=>ObjImporter.Import(bytes,name,sourcePath),
-                ".gltf" or ".glb"=>Formats.Gltf.GltfMeshImporter.Import(bytes,name,sourcePath),
+                ".gltf" or ".glb"=>GltfMeshImporter.Import(bytes,name,sourcePath),
                 _=>FbxModelImporter.Import(bytes,name,sourcePath)
             };
             return HumanoidFacing.Normalize(model);

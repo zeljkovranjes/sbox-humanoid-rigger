@@ -1,8 +1,8 @@
 #nullable enable annotations
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Validation;
 using Vector3=System.Numerics.Vector3;
 using Quaternion=System.Numerics.Quaternion;
-using Face=HumanoidRigger.BindTriangle;
+using Face=HumanoidRigger.EditorTools.Core.Validation.BindTriangle;
 
 /// <summary>Bounded local weight trials for reversed, collapsed or stretched surfaces. Cached poses keep
 /// trials proportional to the edited region; accepted weights receive a full retest.</summary>

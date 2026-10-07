@@ -1,4 +1,4 @@
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Analysis;
 using Vector3 = System.Numerics.Vector3;
 
 /// <summary>Conservative rest-pose checks using both arms, independently of the target profile.</summary>

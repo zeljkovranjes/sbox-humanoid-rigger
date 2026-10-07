@@ -1,4 +1,4 @@
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Validation;
 
 /// <summary>Repair persistent finger folds using a visibility-constrained heat
 /// candidate. Preserve thumb and body weights, and accept only measured improvements.</summary>

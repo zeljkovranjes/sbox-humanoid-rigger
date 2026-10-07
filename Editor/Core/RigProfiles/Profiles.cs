@@ -1,41 +1,7 @@
 #nullable enable annotations
 using System.Numerics;
 using System.Text.Json;
-namespace HumanoidRigger;
-
-public sealed record BonePlacement(string StartRole,string EndRole,float Fraction);
-public sealed record BoneDefinition(string Role,string Name,string? Parent,bool Required=true,bool Deform=true,float Roll=0,string AimAxis="X",BonePlacement? Placement=null);
-public sealed class RigProfile
-{
-    public int Version { get; init; }=1;
-    public string Id { get; init; }="generic";
-    public string Name { get; init; }="Generic Biped";
-    public CharacterPose RestPose { get; init; }=CharacterPose.TPose;
-    public int MaximumInfluences { get; init; }=4;
-    public BoneDefinition[] Bones { get; init; }=[];
-    public ReferenceArmature? Reference { get; init; }
-    public Dictionary<string,string[]> Aliases { get; init; }=new();
-    public Dictionary<string,string> Metadata { get; init; }=new();
-    public void Validate()
-    {
-        if(Version!=1) throw new FormatException("Unsupported rig profile version.");
-        if(MaximumInfluences is <1 or >8) throw new FormatException("Influence limit must be between 1 and 8.");
-        if(Bones.Length==0) throw new FormatException("A profile needs bones.");
-        var roles=new HashSet<string>(); var names=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach(var b in Bones)
-        {
-            if(!roles.Add(b.Role) || string.IsNullOrWhiteSpace(b.Name) || !names.Add(b.Name)) throw new FormatException("Duplicate or empty profile bone.");
-            if(b.Parent is not null && !roles.Contains(b.Parent)) throw new FormatException("Profile parents must precede their children.");
-            if(b.Parent==b.Role || !float.IsFinite(b.Roll) || b.AimAxis is not ("X" or "Y" or "Z")) throw new FormatException("Invalid bone frame.");
-            if(b.Placement is {} placement && (!float.IsFinite(placement.Fraction)||placement.Fraction<0||placement.Fraction>1))throw new FormatException("Invalid helper bone placement.");
-        }
-        if(Reference is null && Bones.Count(b=>b.Parent is null)!=1) throw new FormatException("A profile needs exactly one root.");
-        Reference?.Validate(Bones);
-        foreach(var b in Bones)if(b.Placement is {} placement && (!roles.Contains(placement.StartRole)||!roles.Contains(placement.EndRole)))throw new FormatException("Unknown helper bone anchor.");
-    }
-    public string ToJson() { Validate(); return JsonSerializer.Serialize(this,new JsonSerializerOptions{WriteIndented=true,IncludeFields=true}); }
-    public static RigProfile FromJson(string json) { var p=JsonSerializer.Deserialize<RigProfile>(json,new JsonSerializerOptions{IncludeFields=true}) ?? throw new FormatException("Empty profile."); p.Validate();return p; }
-}
+namespace HumanoidRigger.EditorTools.Core.RigProfiles;
 
 public static class Profiles
 {
@@ -77,4 +43,38 @@ public static class Profiles
         string CcName(string role){var s=role.Split('.');return "CC_Base_"+(s.Length==2?s[1]+"_":"")+cc.GetValueOrDefault(s[0],s[0].Replace("Middle","Mid"));}
         return [Make("citizen","S&box Citizen",4,r=>Named(r,citizen,"citizen")),Make("sbox-human","Generic S&box Humanoid",5,r=>Named(r,citizen,"citizen")),Make("mixamo","Mixamo",5,r=>Named(r,mixamo,"mixamo")),Make("unreal","Unreal Humanoid",5,r=>Named(r,unreal,"unreal"),CharacterPose.APose1),Make("actorcore","ActorCore / Character Creator",5,CcName),Make("generic","Generic Biped",5,r=>r.Replace('.','_')),Make("unity","Unity Humanoid",5,r=>r.Replace('.','_'))];
     }
+}
+
+public sealed record BonePlacement(string StartRole,string EndRole,float Fraction);
+public sealed record BoneDefinition(string Role,string Name,string? Parent,bool Required=true,bool Deform=true,float Roll=0,string AimAxis="X",BonePlacement? Placement=null);
+public sealed class RigProfile
+{
+    public int Version { get; init; }=1;
+    public string Id { get; init; }="generic";
+    public string Name { get; init; }="Generic Biped";
+    public CharacterPose RestPose { get; init; }=CharacterPose.TPose;
+    public int MaximumInfluences { get; init; }=4;
+    public BoneDefinition[] Bones { get; init; }=[];
+    public ReferenceArmature? Reference { get; init; }
+    public Dictionary<string,string[]> Aliases { get; init; }=new();
+    public Dictionary<string,string> Metadata { get; init; }=new();
+    public void Validate()
+    {
+        if(Version!=1) throw new FormatException("Unsupported rig profile version.");
+        if(MaximumInfluences is <1 or >8) throw new FormatException("Influence limit must be between 1 and 8.");
+        if(Bones.Length==0) throw new FormatException("A profile needs bones.");
+        var roles=new HashSet<string>(); var names=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach(var b in Bones)
+        {
+            if(!roles.Add(b.Role) || string.IsNullOrWhiteSpace(b.Name) || !names.Add(b.Name)) throw new FormatException("Duplicate or empty profile bone.");
+            if(b.Parent is not null && !roles.Contains(b.Parent)) throw new FormatException("Profile parents must precede their children.");
+            if(b.Parent==b.Role || !float.IsFinite(b.Roll) || b.AimAxis is not ("X" or "Y" or "Z")) throw new FormatException("Invalid bone frame.");
+            if(b.Placement is {} placement && (!float.IsFinite(placement.Fraction)||placement.Fraction<0||placement.Fraction>1))throw new FormatException("Invalid helper bone placement.");
+        }
+        if(Reference is null && Bones.Count(b=>b.Parent is null)!=1) throw new FormatException("A profile needs exactly one root.");
+        Reference?.Validate(Bones);
+        foreach(var b in Bones)if(b.Placement is {} placement && (!roles.Contains(placement.StartRole)||!roles.Contains(placement.EndRole)))throw new FormatException("Unknown helper bone anchor.");
+    }
+    public string ToJson() { Validate(); return JsonSerializer.Serialize(this,new JsonSerializerOptions{WriteIndented=true,IncludeFields=true}); }
+    public static RigProfile FromJson(string json) { var p=JsonSerializer.Deserialize<RigProfile>(json,new JsonSerializerOptions{IncludeFields=true}) ?? throw new FormatException("Empty profile."); p.Validate();return p; }
 }

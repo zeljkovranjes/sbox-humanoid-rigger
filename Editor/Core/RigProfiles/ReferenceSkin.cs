@@ -1,5 +1,4 @@
-using HumanoidRigger.Formats.Fbx;
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.RigProfiles;
 
 public static class ReferenceSkin
 {

@@ -1,4 +1,4 @@
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Analysis;
 using Vector3=System.Numerics.Vector3;
 
 /// <summary>A low, narrow neck beneath an enlarged head provides a body-scale

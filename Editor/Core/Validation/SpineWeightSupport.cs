@@ -1,4 +1,4 @@
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Validation;
 using Vector3=System.Numerics.Vector3;
 
 /// <summary>Propose adjacent axial influences instead of redundant spine weights.

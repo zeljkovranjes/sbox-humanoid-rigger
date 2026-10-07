@@ -1,5 +1,5 @@
 using System.Numerics;
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Rigging;
 using Vector3=System.Numerics.Vector3;
 
 /// <summary>Absolute preview poses, always evaluated from the imported bind pose.</summary>

@@ -1,4 +1,4 @@
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Validation;
 using Vector3=System.Numerics.Vector3;
 
 /// <summary>Recover split surface edges without welding positions, normals, UVs or materials.

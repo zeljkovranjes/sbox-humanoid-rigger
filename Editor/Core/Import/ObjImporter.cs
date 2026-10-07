@@ -1,7 +1,7 @@
 #nullable enable annotations
 using System.Globalization;
 using System.Text;
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Import;
 using Vector2=System.Numerics.Vector2;
 using Vector3=System.Numerics.Vector3;
 using Vector4=System.Numerics.Vector4;

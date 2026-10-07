@@ -1,8 +1,7 @@
 using System.Numerics;
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.RigProfiles;
 using Vector3=System.Numerics.Vector3;
 
-public sealed record BoneMapping(string Role,int Bone,float Confidence);
 public static class CustomProfile
 {
     /// <summary>Matches geometry first, then uses name and hierarchical parent agreement to disambiguate.
@@ -67,3 +66,5 @@ public static class CustomProfile
         var profile=new RigProfile{Id="custom_"+Guid.NewGuid().ToString("N"),Name=name,Bones=result.ToArray(),Metadata=new(){{"source",source.Name},{"kind","custom"}}};profile.Validate();return profile;
     }
 }
+
+public sealed record BoneMapping(string Role,int Bone,float Confidence);

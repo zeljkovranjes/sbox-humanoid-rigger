@@ -5,7 +5,7 @@
 using Sandbox;
 using Vec=System.Numerics.Vector3;
 using Quat=System.Numerics.Quaternion;
-namespace HumanoidRigger.Editor;
+namespace HumanoidRigger.EditorTools.UI.Viewport;
 
 sealed class BoneOverlay
 {

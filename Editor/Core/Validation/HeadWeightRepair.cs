@@ -1,5 +1,5 @@
 #nullable enable annotations
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Validation;
 using Vector3=System.Numerics.Vector3;
 
 /// <summary>Separate skull ownership at a measured neck contour. Nearby shoulders

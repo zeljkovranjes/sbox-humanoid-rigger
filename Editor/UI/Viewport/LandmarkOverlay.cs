@@ -1,5 +1,5 @@
 using Sandbox;
-namespace HumanoidRigger.Editor;
+namespace HumanoidRigger.EditorTools.UI.Viewport;
 
 /// <summary>Screen-space handles drawn by the scene overlay above the character.</summary>
 sealed class LandmarkOverlay : SceneCustomObject

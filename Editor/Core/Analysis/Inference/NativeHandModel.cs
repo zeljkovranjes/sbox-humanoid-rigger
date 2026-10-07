@@ -1,12 +1,6 @@
 #nullable enable annotations
 using System.Runtime.InteropServices;
-namespace HumanoidRigger;
-
-public sealed record HandPrediction(float Presence, float Handedness, System.Numerics.Vector3[] Pixels);
-public interface IHandLandmarkModel
-{
-    HandPrediction Predict(float[] rgb);
-}
+namespace HumanoidRigger.EditorTools.Core.Analysis.Inference;
 
 /// <summary>Small managed binding to the pinned ONNX Runtime C API. No Python or managed runtime assembly loading.</summary>
 public sealed class NativeHandModel : IHandLandmarkModel, IDisposable
@@ -137,4 +131,10 @@ public sealed class NativeHandModel : IHandLandmarkModel, IDisposable
             if(library!=IntPtr.Zero)NativeLibrary.Free(library);
         }
     }
+}
+
+public sealed record HandPrediction(float Presence, float Handedness, System.Numerics.Vector3[] Pixels);
+public interface IHandLandmarkModel
+{
+    HandPrediction Predict(float[] rgb);
 }

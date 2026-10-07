@@ -3,7 +3,7 @@ using Sandbox;
 using System.Threading.Tasks;
 using Vec=System.Numerics.Vector3;
 using Quat=System.Numerics.Quaternion;
-namespace HumanoidRigger.Editor;
+namespace HumanoidRigger.EditorTools.Engine.Export;
 
 /// <summary>Compile and check the actual native bind pose. Long transform chains can
 /// accumulate importer rounding; bounded feedback removes that drift from the DMX

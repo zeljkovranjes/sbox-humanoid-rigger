@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 using Sandbox;
-namespace HumanoidRigger.Editor;
+namespace HumanoidRigger.EditorTools.Engine;
 internal readonly struct EditorThread : INotifyCompletion
 {
     public EditorThread GetAwaiter()=>this;

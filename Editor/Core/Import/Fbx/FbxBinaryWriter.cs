@@ -5,7 +5,7 @@ using System.Buffers.Binary;
 using System.IO;
 using System.Text;
 
-namespace HumanoidRigger.Formats.Fbx;
+namespace HumanoidRigger.EditorTools.Core.Import.Fbx;
 
 /// <summary>
 /// Serializes an <see cref="FbxNode"/> tree back to binary FBX (version 7400 layout —

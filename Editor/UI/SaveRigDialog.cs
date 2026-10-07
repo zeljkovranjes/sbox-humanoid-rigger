@@ -1,7 +1,7 @@
 using Editor;
 using Sandbox;
 using System.Threading.Tasks;
-namespace HumanoidRigger.Editor;
+namespace HumanoidRigger.EditorTools.UI;
 
 public sealed class SaveRigDialog:Dialog
 {

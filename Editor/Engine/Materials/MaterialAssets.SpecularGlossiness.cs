@@ -1,5 +1,5 @@
 using SkiaSharp;
-namespace HumanoidRigger.Editor;
+namespace HumanoidRigger.EditorTools.Engine.Materials;
 using Vector3=System.Numerics.Vector3;
 using Vector4=System.Numerics.Vector4;
 

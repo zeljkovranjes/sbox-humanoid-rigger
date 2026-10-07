@@ -1,9 +1,8 @@
 #nullable enable annotations
 using System.Globalization;
 using System.Text;
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Export;
 
-public sealed record ObjOutput(string Mesh,string Materials);
 public static class ObjExporter
 {
     public static ObjOutput Write(ImportedCharacter character,string materialFile,SourceMaterial[]? materials=null)
@@ -70,3 +69,5 @@ public static class ObjExporter
         return new(mesh.ToString(),mtl.ToString());
     }
 }
+
+public sealed record ObjOutput(string Mesh,string Materials);

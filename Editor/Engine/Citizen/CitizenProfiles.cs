@@ -2,7 +2,7 @@ using Editor;
 using Sandbox;
 using Vec=System.Numerics.Vector3;
 using Quat=System.Numerics.Quaternion;
-namespace HumanoidRigger.Editor;
+namespace HumanoidRigger.EditorTools.Engine.Citizen;
 
 /// <summary>Only asset locations are known ahead of time. Hierarchy, bind frames,
 /// deform membership and rig settings come from this installation of s&amp;box.</summary>

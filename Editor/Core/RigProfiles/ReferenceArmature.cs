@@ -1,6 +1,6 @@
 #nullable enable annotations
 using System.Numerics;
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.RigProfiles;
 using Vector3=System.Numerics.Vector3;
 
 /// <summary>A snapshot of an installed model, in canonical centimetres. Nothing in

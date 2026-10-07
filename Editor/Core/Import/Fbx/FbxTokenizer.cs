@@ -5,7 +5,7 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 
-namespace HumanoidRigger.Formats.Fbx;
+namespace HumanoidRigger.EditorTools.Core.Import.Fbx;
 
 /// <summary>
 /// Low-level FBX tokenizer. <see cref="Parse"/> accepts either format:

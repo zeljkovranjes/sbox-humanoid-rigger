@@ -4,179 +4,9 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 
-namespace HumanoidRigger.Formats.Fbx;
+namespace HumanoidRigger.EditorTools.Core.Import.Fbx;
 
-using Vector3 = System.Numerics.Vector3; // s&box compat: shadow engine's global-namespace Vector3 (see Code/HumanoidRigger/Assembly.cs)
-
-/// <summary>One <c>P</c> entry of a <c>Properties70</c> block: name, FBX type string, values.</summary>
-public sealed class FbxProperty70
-{
-    /// <summary>Property name (e.g. <c>"Lcl Translation"</c>, <c>"PreRotation"</c>, <c>"d|X"</c>).</summary>
-    public string Name { get; }
-
-    /// <summary>FBX type string (e.g. <c>"Lcl Translation"</c>, <c>"enum"</c>, <c>"Number"</c>).</summary>
-    public string Type { get; }
-
-    /// <summary>Raw values (props 4.. of the P node).</summary>
-    public IReadOnlyList<object> Values { get; }
-
-    internal FbxProperty70(string name, string type, IReadOnlyList<object> values)
-    {
-        Name = name;
-        Type = type;
-        Values = values;
-    }
-
-    /// <summary>Value <paramref name="i"/> as a double (tolerant of int/long/float storage).</summary>
-    public double GetDouble(int i = 0) => Convert.ToDouble(Values[i], System.Globalization.CultureInfo.InvariantCulture);
-
-    /// <summary>Value <paramref name="i"/> as an int (tolerant of long/double storage).</summary>
-    public int GetInt(int i = 0) => Convert.ToInt32(Values[i], System.Globalization.CultureInfo.InvariantCulture);
-
-    /// <summary>First three values as a vector.</summary>
-    public Vector3 GetVector3()
-        => new((float)GetDouble(0), (float)GetDouble(1), (float)GetDouble(2));
-}
-
-/// <summary>
-/// One object from the FBX <c>Objects</c> section (Model, NodeAttribute, AnimationStack,
-/// AnimationLayer, AnimationCurveNode, AnimationCurve, Pose, ...).
-/// </summary>
-public sealed class FbxObject
-{
-    /// <summary>Unique object id (the first property of the object node).</summary>
-    public long Id { get; }
-
-    /// <summary>Node type — the FBX node name: "Model", "AnimationCurve", ...</summary>
-    public string NodeType { get; }
-
-    /// <summary>Object name (namespace prefixes like <c>mixamorig1:</c> preserved).</summary>
-    public string Name { get; }
-
-    /// <summary>Object sub-class (third property): "LimbNode", "Null", "Root", "Mesh", ...</summary>
-    public string SubClass { get; }
-
-    /// <summary>The underlying token-tree node.</summary>
-    public FbxNode Node { get; }
-
-    /// <summary>Own Properties70 entries by name (template defaults NOT merged — see <see cref="FbxScene.FindProperty"/>).</summary>
-    public IReadOnlyDictionary<string, FbxProperty70> Properties { get; }
-
-    /// <summary>For Models: the parent Model via an OO connection, or null at the scene root.</summary>
-    public FbxObject? ModelParent { get; internal set; }
-
-    /// <summary>For Models: child Models via OO connections, in connection order.</summary>
-    public List<FbxObject> ModelChildren { get; } = new();
-
-    internal FbxObject(
-        long id, string nodeType, string name, string subClass, FbxNode node,
-        IReadOnlyDictionary<string, FbxProperty70> properties)
-    {
-        Id = id;
-        NodeType = nodeType;
-        Name = name;
-        SubClass = subClass;
-        Node = node;
-        Properties = properties;
-    }
-
-    /// <inheritdoc />
-    public override string ToString() => $"{NodeType} '{Name}' ({SubClass}) #{Id}";
-}
-
-/// <summary>A single animation curve: keyframes for one scalar channel.</summary>
-public sealed class FbxAnimCurve
-{
-    /// <summary>KTIME ticks per second (FBX constant).</summary>
-    public const long TicksPerSecond = 46186158000L;
-
-    /// <summary>Key times in KTIME ticks, ascending.</summary>
-    public long[] KeyTimes { get; }
-
-    /// <summary>Key values, parallel to <see cref="KeyTimes"/>.</summary>
-    public float[] KeyValues { get; }
-
-    internal FbxAnimCurve(long[] keyTimes, float[] keyValues)
-    {
-        KeyTimes = keyTimes;
-        KeyValues = keyValues;
-    }
-
-    /// <summary>
-    /// Samples the curve at a KTIME tick: linear interpolation between keys, constant
-    /// extrapolation outside the key range.
-    /// </summary>
-    public float Evaluate(long ticks)
-    {
-        var times = KeyTimes;
-        int n = times.Length;
-        if (n == 0)
-            return 0f;
-        if (ticks <= times[0])
-            return KeyValues[0];
-        if (ticks >= times[n - 1])
-            return KeyValues[n - 1];
-
-        int hi = Array.BinarySearch(times, ticks);
-        if (hi >= 0)
-            return KeyValues[hi];
-        hi = ~hi; // first index with time > ticks; >=1 and <=n-1 here
-        int lo = hi - 1;
-        double span = times[hi] - times[lo];
-        double t = span <= 0 ? 0.0 : (ticks - times[lo]) / span;
-        return (float)(KeyValues[lo] + (KeyValues[hi] - KeyValues[lo]) * t);
-    }
-}
-
-/// <summary>
-/// An AnimationCurveNode: up to three channel curves (X/Y/Z) targeting one transform
-/// property (<c>"Lcl Translation"</c> / <c>"Lcl Rotation"</c> / <c>"Lcl Scaling"</c>) of one Model.
-/// </summary>
-public sealed class FbxAnimCurveNode
-{
-    /// <summary>The curve node object.</summary>
-    public FbxObject Object { get; }
-
-    /// <summary>Channel curves by axis ('X'/'Y'/'Z'), from <c>"d|X"</c>-style OP connections.</summary>
-    public Dictionary<char, FbxAnimCurve> Channels { get; } = new();
-
-    internal FbxAnimCurveNode(FbxObject obj) => Object = obj;
-
-    /// <summary>
-    /// Samples one component: the channel curve when connected, else the curve node's static
-    /// <c>d|X</c> default, else <paramref name="fallback"/> (the model's Lcl value).
-    /// </summary>
-    public float Component(char axis, long ticks, float fallback)
-    {
-        if (Channels.TryGetValue(axis, out var curve))
-            return curve.Evaluate(ticks);
-        if (Object.Properties.TryGetValue("d|" + axis, out var def) && def.Values.Count > 0)
-            return (float)def.GetDouble();
-        return fallback;
-    }
-}
-
-/// <summary>One AnimationStack with its curve bindings, flattened across its layers.</summary>
-public sealed class FbxAnimStack
-{
-    /// <summary>The stack object (its Name is the clip name, e.g. "mixamo.com").</summary>
-    public FbxObject Object { get; }
-
-    /// <summary>
-    /// Curve nodes bound to model transform properties:
-    /// (model id, property name) → curve node. When several layers animate the same property
-    /// the first connected layer wins (layer blending is not supported).
-    /// </summary>
-    public Dictionary<(long ModelId, string Property), FbxAnimCurveNode> Bindings { get; } = new();
-
-    /// <summary>LocalStart from the stack's Properties70, in KTIME ticks (0 when absent).</summary>
-    public long LocalStart { get; internal set; }
-
-    /// <summary>LocalStop from the stack's Properties70, in KTIME ticks (0 when absent).</summary>
-    public long LocalStop { get; internal set; }
-
-    internal FbxAnimStack(FbxObject obj) => Object = obj;
-}
+using Vector3 = System.Numerics.Vector3; // s&box compat: shadow engine's global-namespace Vector3 (see Editor/Core/Assembly.cs)
 
 /// <summary>
 /// Semantic object graph built from an FBX token tree: typed objects, the Model hierarchy
@@ -591,4 +421,174 @@ public sealed class FbxScene
             return null;
         return new FbxAnimCurve(times, values);
     }
+}
+
+/// <summary>One <c>P</c> entry of a <c>Properties70</c> block: name, FBX type string, values.</summary>
+public sealed class FbxProperty70
+{
+    /// <summary>Property name (e.g. <c>"Lcl Translation"</c>, <c>"PreRotation"</c>, <c>"d|X"</c>).</summary>
+    public string Name { get; }
+
+    /// <summary>FBX type string (e.g. <c>"Lcl Translation"</c>, <c>"enum"</c>, <c>"Number"</c>).</summary>
+    public string Type { get; }
+
+    /// <summary>Raw values (props 4.. of the P node).</summary>
+    public IReadOnlyList<object> Values { get; }
+
+    internal FbxProperty70(string name, string type, IReadOnlyList<object> values)
+    {
+        Name = name;
+        Type = type;
+        Values = values;
+    }
+
+    /// <summary>Value <paramref name="i"/> as a double (tolerant of int/long/float storage).</summary>
+    public double GetDouble(int i = 0) => Convert.ToDouble(Values[i], System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>Value <paramref name="i"/> as an int (tolerant of long/double storage).</summary>
+    public int GetInt(int i = 0) => Convert.ToInt32(Values[i], System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>First three values as a vector.</summary>
+    public Vector3 GetVector3()
+        => new((float)GetDouble(0), (float)GetDouble(1), (float)GetDouble(2));
+}
+
+/// <summary>
+/// One object from the FBX <c>Objects</c> section (Model, NodeAttribute, AnimationStack,
+/// AnimationLayer, AnimationCurveNode, AnimationCurve, Pose, ...).
+/// </summary>
+public sealed class FbxObject
+{
+    /// <summary>Unique object id (the first property of the object node).</summary>
+    public long Id { get; }
+
+    /// <summary>Node type — the FBX node name: "Model", "AnimationCurve", ...</summary>
+    public string NodeType { get; }
+
+    /// <summary>Object name (namespace prefixes like <c>mixamorig1:</c> preserved).</summary>
+    public string Name { get; }
+
+    /// <summary>Object sub-class (third property): "LimbNode", "Null", "Root", "Mesh", ...</summary>
+    public string SubClass { get; }
+
+    /// <summary>The underlying token-tree node.</summary>
+    public FbxNode Node { get; }
+
+    /// <summary>Own Properties70 entries by name (template defaults NOT merged — see <see cref="FbxScene.FindProperty"/>).</summary>
+    public IReadOnlyDictionary<string, FbxProperty70> Properties { get; }
+
+    /// <summary>For Models: the parent Model via an OO connection, or null at the scene root.</summary>
+    public FbxObject? ModelParent { get; internal set; }
+
+    /// <summary>For Models: child Models via OO connections, in connection order.</summary>
+    public List<FbxObject> ModelChildren { get; } = new();
+
+    internal FbxObject(
+        long id, string nodeType, string name, string subClass, FbxNode node,
+        IReadOnlyDictionary<string, FbxProperty70> properties)
+    {
+        Id = id;
+        NodeType = nodeType;
+        Name = name;
+        SubClass = subClass;
+        Node = node;
+        Properties = properties;
+    }
+
+    /// <inheritdoc />
+    public override string ToString() => $"{NodeType} '{Name}' ({SubClass}) #{Id}";
+}
+
+/// <summary>A single animation curve: keyframes for one scalar channel.</summary>
+public sealed class FbxAnimCurve
+{
+    /// <summary>KTIME ticks per second (FBX constant).</summary>
+    public const long TicksPerSecond = 46186158000L;
+
+    /// <summary>Key times in KTIME ticks, ascending.</summary>
+    public long[] KeyTimes { get; }
+
+    /// <summary>Key values, parallel to <see cref="KeyTimes"/>.</summary>
+    public float[] KeyValues { get; }
+
+    internal FbxAnimCurve(long[] keyTimes, float[] keyValues)
+    {
+        KeyTimes = keyTimes;
+        KeyValues = keyValues;
+    }
+
+    /// <summary>
+    /// Samples the curve at a KTIME tick: linear interpolation between keys, constant
+    /// extrapolation outside the key range.
+    /// </summary>
+    public float Evaluate(long ticks)
+    {
+        var times = KeyTimes;
+        int n = times.Length;
+        if (n == 0)
+            return 0f;
+        if (ticks <= times[0])
+            return KeyValues[0];
+        if (ticks >= times[n - 1])
+            return KeyValues[n - 1];
+
+        int hi = Array.BinarySearch(times, ticks);
+        if (hi >= 0)
+            return KeyValues[hi];
+        hi = ~hi; // first index with time > ticks; >=1 and <=n-1 here
+        int lo = hi - 1;
+        double span = times[hi] - times[lo];
+        double t = span <= 0 ? 0.0 : (ticks - times[lo]) / span;
+        return (float)(KeyValues[lo] + (KeyValues[hi] - KeyValues[lo]) * t);
+    }
+}
+
+/// <summary>
+/// An AnimationCurveNode: up to three channel curves (X/Y/Z) targeting one transform
+/// property (<c>"Lcl Translation"</c> / <c>"Lcl Rotation"</c> / <c>"Lcl Scaling"</c>) of one Model.
+/// </summary>
+public sealed class FbxAnimCurveNode
+{
+    /// <summary>The curve node object.</summary>
+    public FbxObject Object { get; }
+
+    /// <summary>Channel curves by axis ('X'/'Y'/'Z'), from <c>"d|X"</c>-style OP connections.</summary>
+    public Dictionary<char, FbxAnimCurve> Channels { get; } = new();
+
+    internal FbxAnimCurveNode(FbxObject obj) => Object = obj;
+
+    /// <summary>
+    /// Samples one component: the channel curve when connected, else the curve node's static
+    /// <c>d|X</c> default, else <paramref name="fallback"/> (the model's Lcl value).
+    /// </summary>
+    public float Component(char axis, long ticks, float fallback)
+    {
+        if (Channels.TryGetValue(axis, out var curve))
+            return curve.Evaluate(ticks);
+        if (Object.Properties.TryGetValue("d|" + axis, out var def) && def.Values.Count > 0)
+            return (float)def.GetDouble();
+        return fallback;
+    }
+}
+
+/// <summary>One AnimationStack with its curve bindings, flattened across its layers.</summary>
+public sealed class FbxAnimStack
+{
+    /// <summary>The stack object (its Name is the clip name, e.g. "mixamo.com").</summary>
+    public FbxObject Object { get; }
+
+    /// <summary>
+    /// Curve nodes bound to model transform properties:
+    /// (model id, property name) → curve node. When several layers animate the same property
+    /// the first connected layer wins (layer blending is not supported).
+    /// </summary>
+    public Dictionary<(long ModelId, string Property), FbxAnimCurveNode> Bindings { get; } = new();
+
+    /// <summary>LocalStart from the stack's Properties70, in KTIME ticks (0 when absent).</summary>
+    public long LocalStart { get; internal set; }
+
+    /// <summary>LocalStop from the stack's Properties70, in KTIME ticks (0 when absent).</summary>
+    public long LocalStop { get; internal set; }
+
+    internal FbxAnimStack(FbxObject obj) => Object = obj;
 }

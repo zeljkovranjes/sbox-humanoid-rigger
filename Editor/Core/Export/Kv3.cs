@@ -5,168 +5,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 
-namespace HumanoidRigger.Formats.ModelDoc;
-
-/// <summary>
-/// Base of the minimal KV3 value model used for vmdl files: <see cref="KvObject"/>,
-/// <see cref="KvArray"/>, <see cref="KvString"/>, <see cref="KvLong"/>, <see cref="KvDouble"/>,
-/// <see cref="KvBool"/>, <see cref="KvNull"/>. Integers and doubles are distinct kinds so the
-/// writer can preserve the shipped <c>1</c>-vs-<c>1.0</c> style.
-/// </summary>
-public abstract class KvValue
-{
-    /// <summary>Structural (semantic) equality over whole trees: same kinds, same object
-    /// key order, same array order, equal scalar values.</summary>
-    public static bool DeepEquals(KvValue? a, KvValue? b)
-    {
-        if (ReferenceEquals(a, b))
-            return true;
-        if (a is null || b is null)
-            return false;
-
-        switch (a)
-        {
-            case KvObject oa when b is KvObject ob:
-                if (oa.Count != ob.Count)
-                    return false;
-                for (var i = 0; i < oa.Count; i++)
-                {
-                    if (!string.Equals(oa.Keys[i], ob.Keys[i], StringComparison.Ordinal))
-                        return false;
-                    if (!DeepEquals(oa[oa.Keys[i]], ob[ob.Keys[i]]))
-                        return false;
-                }
-                return true;
-            case KvArray ra when b is KvArray rb:
-                if (ra.Items.Count != rb.Items.Count)
-                    return false;
-                for (var i = 0; i < ra.Items.Count; i++)
-                {
-                    if (!DeepEquals(ra.Items[i], rb.Items[i]))
-                        return false;
-                }
-                return true;
-            case KvString sa when b is KvString sb:
-                return string.Equals(sa.Value, sb.Value, StringComparison.Ordinal);
-            case KvLong la when b is KvLong lb:
-                return la.Value == lb.Value;
-            case KvDouble da when b is KvDouble db:
-                return da.Value.Equals(db.Value);
-            case KvBool ba when b is KvBool bb:
-                return ba.Value == bb.Value;
-            case KvNull when b is KvNull:
-                return true;
-            default:
-                return false;
-        }
-    }
-}
-
-/// <summary>A KV3 object: insertion-ordered string-keyed map.</summary>
-public sealed class KvObject : KvValue
-{
-    private readonly List<string> _keys = new();
-    private readonly Dictionary<string, KvValue> _map = new(StringComparer.Ordinal);
-
-    /// <summary>Keys in insertion order.</summary>
-    public IReadOnlyList<string> Keys => _keys;
-
-    /// <summary>Number of key/value pairs.</summary>
-    public int Count => _keys.Count;
-
-    /// <summary>Gets a value (throws when absent) or sets it (appends new keys at the end).</summary>
-    public KvValue this[string key]
-    {
-        get => _map[key];
-        set
-        {
-            ArgumentNullException.ThrowIfNull(value);
-            if (_map.TryAdd(key, value))
-                _keys.Add(key);
-            else
-                _map[key] = value;
-        }
-    }
-
-    /// <summary>Returns the value for <paramref name="key"/>, or null when absent.</summary>
-    public KvValue? GetOrNull(string key) => _map.TryGetValue(key, out var v) ? v : null;
-
-    /// <summary>Returns the string value of <paramref name="key"/>, or null when absent or
-    /// not a string.</summary>
-    public string? GetString(string key) => GetOrNull(key) is KvString s ? s.Value : null;
-}
-
-/// <summary>A KV3 array.</summary>
-public sealed class KvArray : KvValue
-{
-    /// <summary>The items, in order.</summary>
-    public List<KvValue> Items { get; } = new();
-}
-
-/// <summary>A KV3 string (quoted, multi-line, or bare-identifier in the source).</summary>
-public sealed class KvString : KvValue
-{
-    /// <summary>The unescaped string value.</summary>
-    public string Value { get; }
-
-    /// <summary>Creates a string value.</summary>
-    public KvString(string value) => Value = value ?? throw new ArgumentNullException(nameof(value));
-}
-
-/// <summary>A KV3 integer (no decimal point in the source).</summary>
-public sealed class KvLong : KvValue
-{
-    /// <summary>The integer value.</summary>
-    public long Value { get; }
-
-    /// <summary>Creates an integer value.</summary>
-    public KvLong(long value) => Value = value;
-}
-
-/// <summary>A KV3 floating-point number (decimal point or exponent in the source).</summary>
-public sealed class KvDouble : KvValue
-{
-    /// <summary>The floating-point value.</summary>
-    public double Value { get; }
-
-    /// <summary>Creates a floating-point value.</summary>
-    public KvDouble(double value) => Value = value;
-}
-
-/// <summary>A KV3 boolean.</summary>
-public sealed class KvBool : KvValue
-{
-    /// <summary>The boolean value.</summary>
-    public bool Value { get; }
-
-    /// <summary>Creates a boolean value.</summary>
-    public KvBool(bool value) => Value = value;
-}
-
-/// <summary>The KV3 <c>null</c> value.</summary>
-public sealed class KvNull : KvValue
-{
-    /// <summary>Shared instance.</summary>
-    public static readonly KvNull Instance = new();
-}
-
-/// <summary>A parsed KV3 document: the verbatim header comment plus the root value.</summary>
-public sealed class Kv3Document
-{
-    /// <summary>The header comment line, verbatim (e.g.
-    /// <c>&lt;!-- kv3 encoding:text:... --&gt;</c>).</summary>
-    public string Header { get; }
-
-    /// <summary>The root value (an object for vmdl files).</summary>
-    public KvValue Root { get; }
-
-    /// <summary>Creates a document.</summary>
-    public Kv3Document(string header, KvValue root)
-    {
-        Header = header ?? throw new ArgumentNullException(nameof(header));
-        Root = root ?? throw new ArgumentNullException(nameof(root));
-    }
-}
+namespace HumanoidRigger.EditorTools.Core.Export;
 
 /// <summary>
 /// Minimal KV3 text reader/writer sufficient for vmdl files: header comment, objects, arrays,
@@ -637,5 +476,166 @@ public static class Kv3
             }
             return new FormatException($"KV3 parse error at line {line}, column {col}: {message}");
         }
+    }
+}
+
+/// <summary>
+/// Base of the minimal KV3 value model used for vmdl files: <see cref="KvObject"/>,
+/// <see cref="KvArray"/>, <see cref="KvString"/>, <see cref="KvLong"/>, <see cref="KvDouble"/>,
+/// <see cref="KvBool"/>, <see cref="KvNull"/>. Integers and doubles are distinct kinds so the
+/// writer can preserve the shipped <c>1</c>-vs-<c>1.0</c> style.
+/// </summary>
+public abstract class KvValue
+{
+    /// <summary>Structural (semantic) equality over whole trees: same kinds, same object
+    /// key order, same array order, equal scalar values.</summary>
+    public static bool DeepEquals(KvValue? a, KvValue? b)
+    {
+        if (ReferenceEquals(a, b))
+            return true;
+        if (a is null || b is null)
+            return false;
+
+        switch (a)
+        {
+            case KvObject oa when b is KvObject ob:
+                if (oa.Count != ob.Count)
+                    return false;
+                for (var i = 0; i < oa.Count; i++)
+                {
+                    if (!string.Equals(oa.Keys[i], ob.Keys[i], StringComparison.Ordinal))
+                        return false;
+                    if (!DeepEquals(oa[oa.Keys[i]], ob[ob.Keys[i]]))
+                        return false;
+                }
+                return true;
+            case KvArray ra when b is KvArray rb:
+                if (ra.Items.Count != rb.Items.Count)
+                    return false;
+                for (var i = 0; i < ra.Items.Count; i++)
+                {
+                    if (!DeepEquals(ra.Items[i], rb.Items[i]))
+                        return false;
+                }
+                return true;
+            case KvString sa when b is KvString sb:
+                return string.Equals(sa.Value, sb.Value, StringComparison.Ordinal);
+            case KvLong la when b is KvLong lb:
+                return la.Value == lb.Value;
+            case KvDouble da when b is KvDouble db:
+                return da.Value.Equals(db.Value);
+            case KvBool ba when b is KvBool bb:
+                return ba.Value == bb.Value;
+            case KvNull when b is KvNull:
+                return true;
+            default:
+                return false;
+        }
+    }
+}
+
+/// <summary>A KV3 object: insertion-ordered string-keyed map.</summary>
+public sealed class KvObject : KvValue
+{
+    private readonly List<string> _keys = new();
+    private readonly Dictionary<string, KvValue> _map = new(StringComparer.Ordinal);
+
+    /// <summary>Keys in insertion order.</summary>
+    public IReadOnlyList<string> Keys => _keys;
+
+    /// <summary>Number of key/value pairs.</summary>
+    public int Count => _keys.Count;
+
+    /// <summary>Gets a value (throws when absent) or sets it (appends new keys at the end).</summary>
+    public KvValue this[string key]
+    {
+        get => _map[key];
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            if (_map.TryAdd(key, value))
+                _keys.Add(key);
+            else
+                _map[key] = value;
+        }
+    }
+
+    /// <summary>Returns the value for <paramref name="key"/>, or null when absent.</summary>
+    public KvValue? GetOrNull(string key) => _map.TryGetValue(key, out var v) ? v : null;
+
+    /// <summary>Returns the string value of <paramref name="key"/>, or null when absent or
+    /// not a string.</summary>
+    public string? GetString(string key) => GetOrNull(key) is KvString s ? s.Value : null;
+}
+
+/// <summary>A KV3 array.</summary>
+public sealed class KvArray : KvValue
+{
+    /// <summary>The items, in order.</summary>
+    public List<KvValue> Items { get; } = new();
+}
+
+/// <summary>A KV3 string (quoted, multi-line, or bare-identifier in the source).</summary>
+public sealed class KvString : KvValue
+{
+    /// <summary>The unescaped string value.</summary>
+    public string Value { get; }
+
+    /// <summary>Creates a string value.</summary>
+    public KvString(string value) => Value = value ?? throw new ArgumentNullException(nameof(value));
+}
+
+/// <summary>A KV3 integer (no decimal point in the source).</summary>
+public sealed class KvLong : KvValue
+{
+    /// <summary>The integer value.</summary>
+    public long Value { get; }
+
+    /// <summary>Creates an integer value.</summary>
+    public KvLong(long value) => Value = value;
+}
+
+/// <summary>A KV3 floating-point number (decimal point or exponent in the source).</summary>
+public sealed class KvDouble : KvValue
+{
+    /// <summary>The floating-point value.</summary>
+    public double Value { get; }
+
+    /// <summary>Creates a floating-point value.</summary>
+    public KvDouble(double value) => Value = value;
+}
+
+/// <summary>A KV3 boolean.</summary>
+public sealed class KvBool : KvValue
+{
+    /// <summary>The boolean value.</summary>
+    public bool Value { get; }
+
+    /// <summary>Creates a boolean value.</summary>
+    public KvBool(bool value) => Value = value;
+}
+
+/// <summary>The KV3 <c>null</c> value.</summary>
+public sealed class KvNull : KvValue
+{
+    /// <summary>Shared instance.</summary>
+    public static readonly KvNull Instance = new();
+}
+
+/// <summary>A parsed KV3 document: the verbatim header comment plus the root value.</summary>
+public sealed class Kv3Document
+{
+    /// <summary>The header comment line, verbatim (e.g.
+    /// <c>&lt;!-- kv3 encoding:text:... --&gt;</c>).</summary>
+    public string Header { get; }
+
+    /// <summary>The root value (an object for vmdl files).</summary>
+    public KvValue Root { get; }
+
+    /// <summary>Creates a document.</summary>
+    public Kv3Document(string header, KvValue root)
+    {
+        Header = header ?? throw new ArgumentNullException(nameof(header));
+        Root = root ?? throw new ArgumentNullException(nameof(root));
     }
 }

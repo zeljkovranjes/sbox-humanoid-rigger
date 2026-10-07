@@ -1,5 +1,5 @@
 #nullable enable annotations
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Validation;
 
 /// <summary>Close authored surface seams, then refit their neighborhoods against every pose.
 /// Equal weights at equal positions guarantee seam closure for arbitrary bone motion.</summary>

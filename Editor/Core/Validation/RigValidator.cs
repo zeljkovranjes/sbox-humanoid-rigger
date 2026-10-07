@@ -1,20 +1,8 @@
 #nullable enable annotations
 using System.Numerics;
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Validation;
 using Vector3 = System.Numerics.Vector3;
 
-public sealed record ValidationIssue(string Code,string Message,bool Error);
-public sealed record StressResult(string Pose,float MaximumStretch,float MinimumAreaRatio,int NonFiniteVertices,float SourceEdgeLength=0,float DeformedEdgeLength=0,int NonFiniteMeasurements=0,int ReversedTriangles=0,float ReversedAreaFraction=0);
-public sealed class ValidationReport
-{
-    public List<ValidationIssue> Issues {get;}=[];
-    public List<StressResult> StressTests {get;}=[];
-    public List<StressResult> JointStressTests {get;}=[];
-    public List<StressResult> NativeStressTests {get;}=[];
-    public int Repairs {get;set;}
-    public int RepairPasses {get;set;}
-    public bool Passed=>Issues.All(i=>!i.Error) && StressTests.Count>0;
-}
 public static class RigValidator
 {
     public static ValidationReport ValidateAndRepair(ImportedCharacter character,GeneratedRig rig)
@@ -274,4 +262,17 @@ public static class RigValidator
         }
         return new(name,stretch,minArea,nonFinite,sourceEdge,deformedEdge,invalidMeasurements,reversed,surfaceArea>0?(float)(reversedArea/surfaceArea):0);
     }
+}
+
+public sealed record ValidationIssue(string Code,string Message,bool Error);
+public sealed record StressResult(string Pose,float MaximumStretch,float MinimumAreaRatio,int NonFiniteVertices,float SourceEdgeLength=0,float DeformedEdgeLength=0,int NonFiniteMeasurements=0,int ReversedTriangles=0,float ReversedAreaFraction=0);
+public sealed class ValidationReport
+{
+    public List<ValidationIssue> Issues {get;}=[];
+    public List<StressResult> StressTests {get;}=[];
+    public List<StressResult> JointStressTests {get;}=[];
+    public List<StressResult> NativeStressTests {get;}=[];
+    public int Repairs {get;set;}
+    public int RepairPasses {get;set;}
+    public bool Passed=>Issues.All(i=>!i.Error) && StressTests.Count>0;
 }

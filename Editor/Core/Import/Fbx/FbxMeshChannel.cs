@@ -1,5 +1,5 @@
 #nullable enable annotations
-namespace HumanoidRigger.Formats.Fbx;
+namespace HumanoidRigger.EditorTools.Core.Import.Fbx;
 
 /// <summary>Resolves FBX layer mapping and indexing before triangle expansion.</summary>
 internal sealed class FbxMeshChannel

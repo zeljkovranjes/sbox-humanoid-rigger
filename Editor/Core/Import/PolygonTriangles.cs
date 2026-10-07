@@ -1,4 +1,4 @@
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Import;
 using Vector2=System.Numerics.Vector2;
 using Vector3=System.Numerics.Vector3;
 

@@ -1,7 +1,7 @@
 // Copied from humanoid-retargeter Editor/HumanoidRetargeter/EditorPipeline.cs.
 using Editor;
 using Sandbox;
-namespace HumanoidRigger.Editor;
+namespace HumanoidRigger.EditorTools.Engine.Materials;
 internal static partial class MaterialAssets
 {
 	static readonly string[] TextureExtensions =

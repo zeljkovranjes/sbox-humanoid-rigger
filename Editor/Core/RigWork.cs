@@ -1,6 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core;
 
 /// <summary>Leave CPU capacity for the editor and other applications. Scheduling
 /// changes never reduce solver iterations, candidates, or validation coverage.</summary>

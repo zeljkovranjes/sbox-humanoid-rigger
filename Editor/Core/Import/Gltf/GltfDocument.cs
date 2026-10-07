@@ -2,7 +2,7 @@
 #nullable enable annotations
 using System.Text;
 using System.Text.Json;
-namespace HumanoidRigger.Formats.Gltf;
+namespace HumanoidRigger.EditorTools.Core.Import.Gltf;
 internal sealed class GltfDocument
 {
     private const uint GlbMagic=0x46546C67,ChunkJson=0x4E4F534A,ChunkBin=0x004E4942;

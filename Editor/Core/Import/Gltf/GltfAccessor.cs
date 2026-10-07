@@ -1,7 +1,7 @@
 // Adapted from humanoid-retargeter GltfModelDmxWriter.Accessor.
 #nullable enable annotations
 using System.Text.Json;
-namespace HumanoidRigger.Formats.Gltf;
+namespace HumanoidRigger.EditorTools.Core.Import.Gltf;
     internal sealed class GltfAccessor
     {
         private readonly byte[] _buffer;

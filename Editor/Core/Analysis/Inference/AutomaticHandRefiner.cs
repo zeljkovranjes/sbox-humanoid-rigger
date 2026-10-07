@@ -1,11 +1,6 @@
 #nullable enable annotations
 using System.Threading.Tasks;
-namespace HumanoidRigger;
-
-public interface IHandRefiner
-{
-    HandRefinementReport Refine(ImportedCharacter character,Anatomy anatomy,string side);
-}
+namespace HumanoidRigger.EditorTools.Core.Analysis.Inference;
 
 /// <summary>Warms CPU inference during import; geometry remains usable when the optional prior is unavailable.</summary>
 public sealed class AutomaticHandRefiner : IHandRefiner,IDisposable
@@ -53,4 +48,9 @@ public sealed class AutomaticHandRefiner : IHandRefiner,IDisposable
         }
     }
     void ReleaseModel(){if(loading is not null)_=loading.ContinueWith(task=>{if(task.IsCompletedSuccessfully)task.Result.Dispose();},TaskScheduler.Default);}
+}
+
+public interface IHandRefiner
+{
+    HandRefinementReport Refine(ImportedCharacter character,Anatomy anatomy,string side);
 }

@@ -2,12 +2,11 @@
 using System.Numerics;
 using System.Text;
 using System.Text.Json;
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Export;
 using Vector2=System.Numerics.Vector2;
 using Vector3=System.Numerics.Vector3;
 using Vector4=System.Numerics.Vector4;
 
-public sealed record GltfOutput(byte[] Document,byte[] Buffer);
 /// <summary>glTF 2.0 in meters, preserving profile bone names, local frames and every skin influence.</summary>
 public static class GltfExporter
 {
@@ -156,3 +155,5 @@ public static class GltfExporter
     }
     static string UriPath(string path)=>string.Join("/",path.Replace('\\','/').Split('/').Select(Uri.EscapeDataString));
 }
+
+public sealed record GltfOutput(byte[] Document,byte[] Buffer);

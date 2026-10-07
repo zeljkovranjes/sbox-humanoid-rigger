@@ -1,7 +1,6 @@
 #nullable enable annotations
-using HumanoidRigger.Formats.ModelDoc;
 using System.Numerics;
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Export;
 using Vector3=System.Numerics.Vector3;
 
 /// <summary>Copy rig configuration, not the reference's render meshes, materials,

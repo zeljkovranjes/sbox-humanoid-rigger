@@ -1,6 +1,6 @@
 using Sandbox;
 using Editor;
-namespace HumanoidRigger.Editor;
+namespace HumanoidRigger.EditorTools.UI;
 public sealed class ProfileDialog:Dialog
 {
     public ProfileDialog(Widget parent,ImportedCharacter source,Action<RigProfile> saved):base(parent)

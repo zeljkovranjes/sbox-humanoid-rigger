@@ -1,72 +1,6 @@
 #nullable enable annotations
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Analysis;
 using Vector3 = System.Numerics.Vector3;
-
-public sealed record HandFrame(Vector3 Forward,Vector3 Normal,float Confidence);
-public sealed class Anatomy
-{
-    public Dictionary<string,Landmark> Points {get;}=new();
-    public Dictionary<string,HandFrame> Hands {get;}=new();
-    public Dictionary<string,Vector3> FootEnds {get;}=new();
-    // Hand-region seeds and wrist articulations have different jobs. Keeping
-    // them separate avoids shifting finger segmentation when the wrist is fitted.
-    public Dictionary<string,Vector3> PalmCenters {get;}=new();
-    Dictionary<string,Vector3>? handEnds;
-    public Dictionary<string,Vector3> HandEnds=>handEnds??=new();
-    public Dictionary<string,HandRefinementReport> HandRefinements {get;}=new();
-    Dictionary<string,Landmark>? geometricHandPoints;
-    // Retain only automatic changes for the final deformation comparison.
-    public Dictionary<string,Landmark> GeometricHandPoints=>geometricHandPoints??=new();
-    public CharacterPose Pose {get;set;}
-    public bool UnrecommendedImportPose {get;set;}
-    public float SymmetryPlaneX {get;set;}
-    public bool CenterlineCorrected {get;set;}
-    public float Height {get;set;}
-    public Vector3? HeadEnd {get;set;}
-    public VolumeEvidence? Volume {get;set;}
-    public MultiViewEvidence? Views {get;set;}
-    public List<string> Warnings {get;}=[];
-    public Vector3 this[string role]=>Points[role].Position;
-    public Anatomy Copy()
-    {
-        var copy=new Anatomy{Pose=Pose,UnrecommendedImportPose=UnrecommendedImportPose,SymmetryPlaneX=SymmetryPlaneX,CenterlineCorrected=CenterlineCorrected,Height=Height,HeadEnd=HeadEnd,Volume=Volume,Views=Views};
-        foreach(var pair in Points)copy.Points.Add(pair.Key,pair.Value);
-        foreach(var pair in Hands)copy.Hands.Add(pair.Key,pair.Value);
-        if(FootEnds is not null)foreach(var pair in FootEnds)copy.FootEnds.Add(pair.Key,pair.Value);
-        foreach(var pair in PalmCenters)copy.PalmCenters.Add(pair.Key,pair.Value);
-        if(HandEnds is not null)foreach(var pair in HandEnds)copy.HandEnds.Add(pair.Key,pair.Value);
-        foreach(var pair in HandRefinements)copy.HandRefinements.Add(pair.Key,pair.Value);
-        foreach(var pair in GeometricHandPoints)copy.GeometricHandPoints.Add(pair.Key,pair.Value);
-        copy.Warnings.AddRange(Warnings);return copy;
-    }
-    public void Set(string role,Vector3 p,float confidence)=>Points[role]=new(role,p,Math.Clamp(confidence,0,1));
-    public void Correct(string role,Vector3 p)
-    {
-        if(!Geometry.Finite(p)) throw new ArgumentException("Invalid landmark position.");
-        if(!Points.ContainsKey(role)) throw new ArgumentException("Unknown landmark.");
-        var previous=Points[role].Position;
-        Points[role]=new(role,p,1,true);
-        GeometricHandPoints.Remove(role);
-        if(role is "Pelvis" or "Chest") RecomputeSpine();
-        foreach(string side in new[]{"L","R"})
-        {
-            if(role=="Hand."+side&&PalmCenters.TryGetValue(side,out var palm))PalmCenters[side]=palm+(p-previous);
-            if(role=="Hand."+side&&HandEnds.TryGetValue(side,out var end))HandEnds[side]=end+(p-previous);
-            if(role!="Hand."+side&&role!="LowerArm."+side||!Hands.TryGetValue(side,out var frame))continue;
-            var forward=this["Hand."+side]-this["LowerArm."+side];
-            if(forward.LengthSquared()<1e-8f){Hands.Remove(side);continue;}
-            forward=Vector3.Normalize(forward);
-            var normal=frame.Normal-forward*Vector3.Dot(frame.Normal,forward);
-            if(normal.LengthSquared()<1e-8f){Hands.Remove(side);continue;}
-            Hands[side]=frame with{Forward=forward,Normal=Vector3.Normalize(normal)};
-        }
-    }
-    public void RecomputeSpine()
-    {
-        foreach(var (role,t) in new[]{("SpineLower",0.32f),("SpineMid",0.66f)})
-            if(!Points.TryGetValue(role,out var p) || !p.Corrected) Set(role,Vector3.Lerp(this["Pelvis"],this["Chest"],t),0.7f);
-    }
-}
 
 /// <summary>Cross-section center fitting with anatomical candidates and bilateral priors.
 /// Confidence remains conservative for silhouette-derived joints and inseparable surfaces.</summary>
@@ -240,5 +174,71 @@ public static class BodyDetector
     internal static float Quantile(IEnumerable<float> values,float q)
     {
         var sorted=values.Order().ToArray();return sorted.Length==0 ? 0 : sorted[(int)((sorted.Length-1)*q)];
+    }
+}
+
+public sealed record HandFrame(Vector3 Forward,Vector3 Normal,float Confidence);
+public sealed class Anatomy
+{
+    public Dictionary<string,Landmark> Points {get;}=new();
+    public Dictionary<string,HandFrame> Hands {get;}=new();
+    public Dictionary<string,Vector3> FootEnds {get;}=new();
+    // Hand-region seeds and wrist articulations have different jobs. Keeping
+    // them separate avoids shifting finger segmentation when the wrist is fitted.
+    public Dictionary<string,Vector3> PalmCenters {get;}=new();
+    Dictionary<string,Vector3>? handEnds;
+    public Dictionary<string,Vector3> HandEnds=>handEnds??=new();
+    public Dictionary<string,HandRefinementReport> HandRefinements {get;}=new();
+    Dictionary<string,Landmark>? geometricHandPoints;
+    // Retain only automatic changes for the final deformation comparison.
+    public Dictionary<string,Landmark> GeometricHandPoints=>geometricHandPoints??=new();
+    public CharacterPose Pose {get;set;}
+    public bool UnrecommendedImportPose {get;set;}
+    public float SymmetryPlaneX {get;set;}
+    public bool CenterlineCorrected {get;set;}
+    public float Height {get;set;}
+    public Vector3? HeadEnd {get;set;}
+    public VolumeEvidence? Volume {get;set;}
+    public MultiViewEvidence? Views {get;set;}
+    public List<string> Warnings {get;}=[];
+    public Vector3 this[string role]=>Points[role].Position;
+    public Anatomy Copy()
+    {
+        var copy=new Anatomy{Pose=Pose,UnrecommendedImportPose=UnrecommendedImportPose,SymmetryPlaneX=SymmetryPlaneX,CenterlineCorrected=CenterlineCorrected,Height=Height,HeadEnd=HeadEnd,Volume=Volume,Views=Views};
+        foreach(var pair in Points)copy.Points.Add(pair.Key,pair.Value);
+        foreach(var pair in Hands)copy.Hands.Add(pair.Key,pair.Value);
+        if(FootEnds is not null)foreach(var pair in FootEnds)copy.FootEnds.Add(pair.Key,pair.Value);
+        foreach(var pair in PalmCenters)copy.PalmCenters.Add(pair.Key,pair.Value);
+        if(HandEnds is not null)foreach(var pair in HandEnds)copy.HandEnds.Add(pair.Key,pair.Value);
+        foreach(var pair in HandRefinements)copy.HandRefinements.Add(pair.Key,pair.Value);
+        foreach(var pair in GeometricHandPoints)copy.GeometricHandPoints.Add(pair.Key,pair.Value);
+        copy.Warnings.AddRange(Warnings);return copy;
+    }
+    public void Set(string role,Vector3 p,float confidence)=>Points[role]=new(role,p,Math.Clamp(confidence,0,1));
+    public void Correct(string role,Vector3 p)
+    {
+        if(!Geometry.Finite(p)) throw new ArgumentException("Invalid landmark position.");
+        if(!Points.ContainsKey(role)) throw new ArgumentException("Unknown landmark.");
+        var previous=Points[role].Position;
+        Points[role]=new(role,p,1,true);
+        GeometricHandPoints.Remove(role);
+        if(role is "Pelvis" or "Chest") RecomputeSpine();
+        foreach(string side in new[]{"L","R"})
+        {
+            if(role=="Hand."+side&&PalmCenters.TryGetValue(side,out var palm))PalmCenters[side]=palm+(p-previous);
+            if(role=="Hand."+side&&HandEnds.TryGetValue(side,out var end))HandEnds[side]=end+(p-previous);
+            if(role!="Hand."+side&&role!="LowerArm."+side||!Hands.TryGetValue(side,out var frame))continue;
+            var forward=this["Hand."+side]-this["LowerArm."+side];
+            if(forward.LengthSquared()<1e-8f){Hands.Remove(side);continue;}
+            forward=Vector3.Normalize(forward);
+            var normal=frame.Normal-forward*Vector3.Dot(frame.Normal,forward);
+            if(normal.LengthSquared()<1e-8f){Hands.Remove(side);continue;}
+            Hands[side]=frame with{Forward=forward,Normal=Vector3.Normalize(normal)};
+        }
+    }
+    public void RecomputeSpine()
+    {
+        foreach(var (role,t) in new[]{("SpineLower",0.32f),("SpineMid",0.66f)})
+            if(!Points.TryGetValue(role,out var p) || !p.Corrected) Set(role,Vector3.Lerp(this["Pelvis"],this["Chest"],t),0.7f);
     }
 }

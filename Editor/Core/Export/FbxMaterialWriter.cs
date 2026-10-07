@@ -1,5 +1,4 @@
-using HumanoidRigger.Formats.Fbx;
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Export;
 using static FbxExporter;
 
 internal static class FbxMaterialWriter

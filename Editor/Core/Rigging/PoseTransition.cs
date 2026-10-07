@@ -1,5 +1,5 @@
 using System.Numerics;
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Rigging;
 
 /// <summary>Interpolates local joint rotations, including changes made during a transition.</summary>
 public sealed class PoseTransition

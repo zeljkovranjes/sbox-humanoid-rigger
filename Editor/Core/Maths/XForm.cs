@@ -3,9 +3,9 @@
 using System;
 using System.Numerics;
 
-namespace HumanoidRigger.Maths;
+namespace HumanoidRigger.EditorTools.Core.Maths;
 
-using Vector3 = System.Numerics.Vector3; // s&box compat: shadow engine's global-namespace Vector3 (see Code/HumanoidRigger/Assembly.cs)
+using Vector3 = System.Numerics.Vector3; // s&box compat: shadow engine's global-namespace Vector3 (see Editor/Core/Assembly.cs)
 
 /// <summary>
 /// A rigid transform: rotation followed by translation (no scale or shear).

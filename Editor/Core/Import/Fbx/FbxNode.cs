@@ -1,6 +1,6 @@
 #nullable enable annotations
 
-namespace HumanoidRigger.Formats.Fbx;
+namespace HumanoidRigger.EditorTools.Core.Import.Fbx;
 
 /// <summary>
 /// A single node of an FBX document tree (binary or ASCII): a name, a flat list of

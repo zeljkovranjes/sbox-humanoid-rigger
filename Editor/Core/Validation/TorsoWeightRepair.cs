@@ -1,4 +1,4 @@
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Validation;
 using Vector3 = System.Numerics.Vector3;
 
 /// <summary>Keeps limb motion from pulling the central spine surface sideways.</summary>

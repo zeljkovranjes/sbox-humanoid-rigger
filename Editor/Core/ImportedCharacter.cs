@@ -1,22 +1,5 @@
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core;
 using Vector3 = System.Numerics.Vector3;
-
-public enum CharacterPose { Auto, TPose, APose1, APose2, Relaxed, Unknown }
-public enum MeshKind { Body, Clothing, Hair, Shoe, Accessory }
-public sealed record MeshPart(string Name, Vector3[] Vertices, int[] Triangles, MeshKind Kind)
-{
-    // Triangle-corner channels preserve seams and hard edges without changing the
-    // control points or connectivity used by the anatomical and skinning solvers.
-    public Vector3[] CornerNormals {get;init;}=[];
-    // Canonical texture coordinates use a lower-left origin. Native rendering/DMX invert V.
-    public System.Numerics.Vector2[] CornerTexCoords {get;init;}=[];
-    System.Numerics.Vector4[] cornerColors=[];
-    // Existing editor objects can survive hotload before this optional channel existed.
-    public System.Numerics.Vector4[] CornerColors {get=>cornerColors??[];init=>cornerColors=value;}
-    public int[] TriangleMaterials {get;init;}=[];
-}
-public sealed record SourceBone(string Name, int Parent, Vector3 Position);
-public sealed record Landmark(string Role, Vector3 Position, float Confidence, bool Corrected = false);
 
 /// <summary>Canonical space is X left, Y up, Z forward, in centimeters.</summary>
 public sealed class ImportedCharacter
@@ -60,6 +43,23 @@ public sealed class ImportedCharacter
         if (Height < 0.001f) throw new FormatException("The model has no usable height.");
     }
 }
+
+public enum CharacterPose { Auto, TPose, APose1, APose2, Relaxed, Unknown }
+public enum MeshKind { Body, Clothing, Hair, Shoe, Accessory }
+public sealed record MeshPart(string Name, Vector3[] Vertices, int[] Triangles, MeshKind Kind)
+{
+    // Triangle-corner channels preserve seams and hard edges without changing the
+    // control points or connectivity used by the anatomical and skinning solvers.
+    public Vector3[] CornerNormals {get;init;}=[];
+    // Canonical texture coordinates use a lower-left origin. Native rendering/DMX invert V.
+    public System.Numerics.Vector2[] CornerTexCoords {get;init;}=[];
+    System.Numerics.Vector4[] cornerColors=[];
+    // Existing editor objects can survive hotload before this optional channel existed.
+    public System.Numerics.Vector4[] CornerColors {get=>cornerColors??[];init=>cornerColors=value;}
+    public int[] TriangleMaterials {get;init;}=[];
+}
+public sealed record SourceBone(string Name, int Parent, Vector3 Position);
+public sealed record Landmark(string Role, Vector3 Position, float Confidence, bool Corrected = false);
 
 public static class Geometry
 {

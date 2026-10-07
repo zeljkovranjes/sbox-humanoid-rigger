@@ -1,5 +1,5 @@
 using System.Text.Json;
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Export;
 public static class ModelDocExporter
 {
     public static string Write(string meshPath,GeneratedRig rig,ImportedCharacter character,bool hasMaterials=false)

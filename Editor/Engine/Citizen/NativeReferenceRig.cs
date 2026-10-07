@@ -3,7 +3,7 @@ using Sandbox;
 using System.Threading.Tasks;
 using Vec=System.Numerics.Vector3;
 using Quat=System.Numerics.Quaternion;
-namespace HumanoidRigger.Editor;
+namespace HumanoidRigger.EditorTools.Engine.Citizen;
 
 /// <summary>Validate Source 2's real constraint output before final preview or
 /// any export. Weight repair changes neither the template nor the mesh.</summary>

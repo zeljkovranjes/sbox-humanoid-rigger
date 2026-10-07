@@ -1,11 +1,8 @@
 #nullable enable annotations
 using System.Numerics;
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Validation;
 using Vector3=System.Numerics.Vector3;
 
-public enum PoseAxisSpace { World, BoneBend, BoneTwist, BoneNormal }
-public sealed record StressJoint(string Role,Vector3 Axis,float Degrees,PoseAxisSpace AxisSpace=PoseAxisSpace.World);
-public sealed record StressPose(string Name,string Role,Vector3 Axis,float Degrees,PoseAxisSpace AxisSpace=PoseAxisSpace.World,IReadOnlyList<StressJoint>? AdditionalJoints=null);
 public static class Deformation
 {
     // Build definitions on access: editor hotload must not migrate old pose
@@ -115,3 +112,7 @@ public static class Deformation
         return (positions,rotations);
     }
 }
+
+public enum PoseAxisSpace { World, BoneBend, BoneTwist, BoneNormal }
+public sealed record StressJoint(string Role,Vector3 Axis,float Degrees,PoseAxisSpace AxisSpace=PoseAxisSpace.World);
+public sealed record StressPose(string Name,string Role,Vector3 Axis,float Degrees,PoseAxisSpace AxisSpace=PoseAxisSpace.World,IReadOnlyList<StressJoint>? AdditionalJoints=null);

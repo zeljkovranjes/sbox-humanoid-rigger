@@ -1,6 +1,6 @@
 using Editor;
 using Sandbox;
-namespace HumanoidRigger.Editor;
+namespace HumanoidRigger.EditorTools.UI;
 
 /// <summary>Compact selectable rows following the suite's native mapping panels.</summary>
 sealed class JointPanel : Widget

@@ -1,57 +1,8 @@
 #nullable enable annotations
 using System.Numerics;
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Rigging;
 using Vector3 = System.Numerics.Vector3;
 
-public sealed record RigBone(string Role,string Name,int Parent,Vector3 Position,Quaternion Rotation,bool Deform);
-public readonly record struct Influence(int Bone,float Weight);
-public sealed class GeneratedRig
-{
-    public RigProfile Profile {get;init;}=new();
-    public RigBone[] Bones {get;init;}=[];
-    public Influence[][][] Weights {get;set;}=[];
-    public ValidationReport Report {get;set;}=new();
-    public Anatomy? Anatomy {get;init;}
-}
-public static class RigGeometry
-{
-    public static bool CanPose(GeneratedRig rig,int index)=>rig.Bones[index].Deform||
-        rig.Profile.Reference is not null&&rig.Bones[index].Role!="Root"&&!rig.Bones[index].Role.StartsWith("Reference:")&&rig.Anatomy?.Points.ContainsKey(rig.Bones[index].Role)==true;
-    internal static Vector3? AnatomicalEnd(Anatomy? anatomy,string role)
-    {
-        if(anatomy is null)return null;
-        if(role=="Head")return anatomy.HeadEnd;
-        if(role.StartsWith("Hand.")&&anatomy.HandEnds?.TryGetValue(role[^1..],out var palm)==true)return palm;
-        if(role.StartsWith("Toe.")&&anatomy.FootEnds?.TryGetValue(role[^1..],out var foot)==true)return foot;
-        if(!role.EndsWith(".L")&&!role.EndsWith(".R"))return null;
-        foreach(string finger in Profiles.Fingers)foreach(int joint in Enumerable.Range(1,3))
-            if(role==finger+joint+"."+role[^1..]&&anatomy.Points.TryGetValue(finger+"Tip."+role[^1..],out var tip))return tip.Position;
-        return null;
-    }
-    /// <summary>Skinning segments follow anatomy, independent of profile child ordering.</summary>
-    public static Vector3[] SegmentEnds(GeneratedRig rig)
-    {
-        var canonical=rig.Profile.Reference is null?null:Profiles.CanonicalBones().ToLookup(b=>b.Parent);
-        return rig.Bones.Select((bone,index)=>
-    {
-        var children=rig.Bones.Where(b=>b.Parent==index&&b.Deform).ToArray();
-        if(rig.Profile.Reference is not null&&!bone.Role.StartsWith("Reference:"))
-        {
-            // Reference helpers can precede the anatomical child or sit between
-            // a palm and its knuckles. Neither changes the skinning segment.
-            children=canonical![bone.Role].Select(d=>rig.Bones.FirstOrDefault(b=>b.Role==d.Role)).Where(b=>b is not null).ToArray()!;
-        }
-        if(children.Length==0&&AnatomicalEnd(rig.Anatomy,bone.Role) is {} terminal)return terminal;
-        if(bone.Role.StartsWith("Hand."))
-        {
-            string side=bone.Role[^1..];
-            var knuckles=children.Where(b=>Profiles.Fingers.Where(f=>f!="Thumb").Any(f=>b.Role==f+"1."+side)).ToArray();
-            if(knuckles.Length>0)return Geometry.Mean(knuckles.Select(b=>b.Position));
-        }
-        return children.FirstOrDefault()?.Position??bone.Position;
-    }).ToArray();
-    }
-}
 public static class SkeletonSolver
 {
     public static GeneratedRig Fit(ImportedCharacter character,Anatomy anatomy,RigProfile profile)
@@ -216,5 +167,55 @@ public static class SkeletonSolver
         else {x=aim;y=perpendicular;z=Vector3.Cross(x,y);}
         var matrix=new Matrix4x4(x.X,x.Y,x.Z,0,y.X,y.Y,y.Z,0,z.X,z.Y,z.Z,0,0,0,0,1);
         return Quaternion.Normalize(Quaternion.CreateFromAxisAngle(aim,roll*MathF.PI/180)*Quaternion.CreateFromRotationMatrix(matrix));
+    }
+}
+
+public sealed record RigBone(string Role,string Name,int Parent,Vector3 Position,Quaternion Rotation,bool Deform);
+public readonly record struct Influence(int Bone,float Weight);
+public sealed class GeneratedRig
+{
+    public RigProfile Profile {get;init;}=new();
+    public RigBone[] Bones {get;init;}=[];
+    public Influence[][][] Weights {get;set;}=[];
+    public ValidationReport Report {get;set;}=new();
+    public Anatomy? Anatomy {get;init;}
+}
+public static class RigGeometry
+{
+    public static bool CanPose(GeneratedRig rig,int index)=>rig.Bones[index].Deform||
+        rig.Profile.Reference is not null&&rig.Bones[index].Role!="Root"&&!rig.Bones[index].Role.StartsWith("Reference:")&&rig.Anatomy?.Points.ContainsKey(rig.Bones[index].Role)==true;
+    internal static Vector3? AnatomicalEnd(Anatomy? anatomy,string role)
+    {
+        if(anatomy is null)return null;
+        if(role=="Head")return anatomy.HeadEnd;
+        if(role.StartsWith("Hand.")&&anatomy.HandEnds?.TryGetValue(role[^1..],out var palm)==true)return palm;
+        if(role.StartsWith("Toe.")&&anatomy.FootEnds?.TryGetValue(role[^1..],out var foot)==true)return foot;
+        if(!role.EndsWith(".L")&&!role.EndsWith(".R"))return null;
+        foreach(string finger in Profiles.Fingers)foreach(int joint in Enumerable.Range(1,3))
+            if(role==finger+joint+"."+role[^1..]&&anatomy.Points.TryGetValue(finger+"Tip."+role[^1..],out var tip))return tip.Position;
+        return null;
+    }
+    /// <summary>Skinning segments follow anatomy, independent of profile child ordering.</summary>
+    public static Vector3[] SegmentEnds(GeneratedRig rig)
+    {
+        var canonical=rig.Profile.Reference is null?null:Profiles.CanonicalBones().ToLookup(b=>b.Parent);
+        return rig.Bones.Select((bone,index)=>
+    {
+        var children=rig.Bones.Where(b=>b.Parent==index&&b.Deform).ToArray();
+        if(rig.Profile.Reference is not null&&!bone.Role.StartsWith("Reference:"))
+        {
+            // Reference helpers can precede the anatomical child or sit between
+            // a palm and its knuckles. Neither changes the skinning segment.
+            children=canonical![bone.Role].Select(d=>rig.Bones.FirstOrDefault(b=>b.Role==d.Role)).Where(b=>b is not null).ToArray()!;
+        }
+        if(children.Length==0&&AnatomicalEnd(rig.Anatomy,bone.Role) is {} terminal)return terminal;
+        if(bone.Role.StartsWith("Hand."))
+        {
+            string side=bone.Role[^1..];
+            var knuckles=children.Where(b=>Profiles.Fingers.Where(f=>f!="Thumb").Any(f=>b.Role==f+"1."+side)).ToArray();
+            if(knuckles.Length>0)return Geometry.Mean(knuckles.Select(b=>b.Position));
+        }
+        return children.FirstOrDefault()?.Position??bone.Position;
+    }).ToArray();
     }
 }

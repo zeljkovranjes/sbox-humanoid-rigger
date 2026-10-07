@@ -2,7 +2,7 @@ using System.IO.Compression;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Analysis.Inference;
 
 /// <summary>Pinned, hash-checked model/runtime cache. Downloads never contain user model data.</summary>
 public static class HandModelAssets

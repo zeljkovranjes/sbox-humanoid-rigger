@@ -7,7 +7,18 @@
   "IncludeSourceFiles": true,
   "PackageReferences": [],
   "Metadata": {
-    "Summary": "Humanoid rigging editor with automatic landmarks and validation.",
-    "Compiler": { "ReleaseMode": "Release" }
+    "Summary": "Auto-rigs humanoid meshes in the editor: detects landmarks, builds and skins a skeleton, and checks deformation.",
+    "Description": "An editor tool that turns an unrigged humanoid mesh (Fbx, Obj, Gltf or Glb) into a rigged, skinned character. Open View > Humanoid Rigger, check the detected body and hand points, pick a rig profile and generate; every joint is stress-tested before you can save. Saves Vmdl, Fbx, Gltf, Glb or Obj. Editor-only: nothing from it ships in your game.",
+    "WebsiteUrl": "https://github.com/zeljkovranjes/sbox-humanoid-rigger",
+    "Tags": [
+      "editor",
+      "character",
+      "rigging",
+      "skinning",
+      "humanoid"
+    ],
+    "Compiler": {
+      "ReleaseMode": "Release"
+    }
   }
 }

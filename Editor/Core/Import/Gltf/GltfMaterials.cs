@@ -1,6 +1,6 @@
 #nullable enable annotations
 using System.Text.Json;
-namespace HumanoidRigger.Formats.Gltf;
+namespace HumanoidRigger.EditorTools.Core.Import.Gltf;
 using Vector3=System.Numerics.Vector3;
 using Vector2=System.Numerics.Vector2;
 

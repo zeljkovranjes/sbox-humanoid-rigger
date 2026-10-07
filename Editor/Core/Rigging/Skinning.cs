@@ -1,4 +1,4 @@
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Rigging;
 using Vector3 = System.Numerics.Vector3;
 
 /// <summary>Region-constrained envelopes initialize a screened graph diffusion solve.

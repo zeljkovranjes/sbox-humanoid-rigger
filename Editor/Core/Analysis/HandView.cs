@@ -1,5 +1,5 @@
 using System.Numerics;
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Analysis;
 using Vector3=System.Numerics.Vector3;
 
 /// <summary>Orthographic hand crops with actual front/back mesh depth, independent of the editor viewport.</summary>

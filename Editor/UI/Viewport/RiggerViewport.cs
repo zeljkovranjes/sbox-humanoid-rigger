@@ -3,7 +3,7 @@ using Sandbox;
 using Vec=System.Numerics.Vector3;
 using Quat=System.Numerics.Quaternion;
 using System.Diagnostics;
-namespace HumanoidRigger.Editor;
+namespace HumanoidRigger.EditorTools.UI.Viewport;
 
 public sealed class RiggerViewport : SceneRenderingWidget
 {

@@ -2,7 +2,7 @@
 using System.Globalization;
 using System.Numerics;
 using System.Text;
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core.Export;
 using Vector3=System.Numerics.Vector3;
 using Vector2=System.Numerics.Vector2;
 using Vector4=System.Numerics.Vector4;

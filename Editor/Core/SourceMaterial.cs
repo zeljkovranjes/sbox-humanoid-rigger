@@ -1,6 +1,6 @@
 // Adapted from humanoid-retargeter Editor/HumanoidRetargeter/EditorPipeline.cs.
 #nullable disable
-namespace HumanoidRigger;
+namespace HumanoidRigger.EditorTools.Core;
 	public sealed record SourceMaterial
 	{
 		public string Name { get; init; }

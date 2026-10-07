@@ -1,6 +1,6 @@
 # Blender bone display
 
-`Editor/UI/BoneOverlay.cs` adapts the six octahedral vertex positions and eight
+`Editor/UI/Viewport/BoneOverlay.cs` adapts the six octahedral vertex positions and eight
 triangle indices from Blender's `bone_octahedral_verts` and
 `bone_octahedral_solid_tris`. The native s&box rendering and pose updates are
 implemented in C# in this project.

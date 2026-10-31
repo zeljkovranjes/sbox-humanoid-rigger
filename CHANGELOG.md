@@ -3,6 +3,7 @@
 ## 2026-10-31
 ### Fixed
 - Saving a rig on Linux no longer fails with "Timed out waiting for materials to compile", and a textured model no longer shows white the first time it is imported ("Textures: Timed out waiting for materials to compile").
+- Saving a rig on Linux no longer fails with "Timed out waiting for the generated model to compile".
 
 ## 2026-10-07
 ### Fixed

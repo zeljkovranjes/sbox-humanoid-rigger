@@ -24,6 +24,8 @@ internal static class NativeRigExport
             {
                 await Task.Delay(250);await new EditorThread();
                 if(asset.IsCompileFailed)throw new IOException("s&box could not compile the generated model.");
+                // A new model's compiled file isn't noticed by the asset system until it is registered (seen on Linux)
+                if(File.Exists(compiledPath))AssetSystem.RegisterFile(compiledPath);
                 if(!asset.IsCompiledAndUpToDate||!File.Exists(compiledPath)||(pass>0&&File.GetLastWriteTimeUtc(compiledPath)==previous))continue;
                 model=await Model.LoadAsync(asset.Path);await new EditorThread();break;
             }

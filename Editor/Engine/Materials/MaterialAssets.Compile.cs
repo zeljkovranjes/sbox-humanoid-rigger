@@ -18,6 +18,9 @@ internal static partial class MaterialAssets
             if(assets.Any(a=>a.IsCompileFailed))throw new IOException("s&box could not compile a generated material.");
             if(attempt>=120)throw new TimeoutException("Timed out waiting for materials to compile.");
             await Task.Delay(250);await new EditorThread();
+            // The asset system doesn't notice compiled files appearing in a folder it has just been given (seen on
+            // Linux): the material stays "not compiled" with its _c on disk until they are registered
+            foreach(var file in Directory.EnumerateFiles(directory,"*_c",SearchOption.AllDirectories))AssetSystem.RegisterFile(file);
         }
         return paths;
     }

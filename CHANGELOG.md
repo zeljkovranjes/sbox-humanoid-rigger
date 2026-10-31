@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-31
+### Fixed
+- Saving a rig on Linux no longer fails with "Timed out waiting for materials to compile", and a textured model no longer shows white the first time it is imported ("Textures: Timed out waiting for materials to compile").
+
 ## 2026-10-07
 ### Fixed
 - Characters rigged with a Complete Citizen profile in a T-pose no longer twist at the biceps, elbows and forearms when they play stock Citizen animations. Each fitted bone now keeps the Citizen's frame turned onto the character's own limb, so the shipped helper constraints read the same twist as on the Citizen.

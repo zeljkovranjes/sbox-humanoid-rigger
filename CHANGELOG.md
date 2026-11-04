@@ -3,6 +3,7 @@
 ## 2026-11-03
 ### Added
 - Complete Citizen profiles carry AnimGraph2 over: when the reference model names an AnimGraph2 (`.ag`) graph and the stock bind transforms match, the saved model names that graph too. References with only an AnimGraph1 graph save exactly as before.
+- The rigger window and Rig details show which animation graph system the chosen reference model uses: "AnimGraph1 (legacy)" or "Using AnimGraph2".
 
 ## 2026-10-31
 ### Fixed

@@ -136,6 +136,7 @@ public sealed class RiggerWindow : Widget
         {
             var notice=bottom.Add(new Label(content){Text=referenceRig.Compatibility(Session.Rig),WordWrap=true});
             notice.SetStyles($"color: {Theme.Yellow.Hex};");
+            bottom.Add(new Label(content){Text=GraphIndicator(referenceRig),ToolTip="The reference model's animation graph. It is copied into the saved model only when the stock bind transforms match."});
         }
         if(Session.Step is WizardStep.Centerline or WizardStep.Body)
         {
@@ -373,8 +374,10 @@ public sealed class RiggerWindow : Widget
         foreach(var b in Session.Rig!.Bones)scroll.Canvas.Layout.Add(new Label(scroll.Canvas){Text=$"{b.Name}  ·  {b.Role}  ·  {b.Position}"});
         foreach(var issue in Session.Rig.Report.Issues)scroll.Canvas.Layout.Add(new Label(scroll.Canvas){Text=issue.Message});
         foreach(var hand in Session.Anatomy!.HandRefinements)scroll.Canvas.Layout.Add(new Label(scroll.Canvas){Text=$"{(hand.Key=="L"?"Left":"Right")} hand: {hand.Value.Status}"});
+        if(Session.Profile.Reference is {} referenceRig)scroll.Canvas.Layout.Add(new Label(scroll.Canvas){Text=GraphIndicator(referenceRig)});
         dialog.Layout.Add(scroll,1);dialog.Show();
     }
+    static string GraphIndicator(ReferenceArmature reference)=>"Animation graph: "+AnimGraphVersions.Describe(AnimGraphVersions.Of(Model.Load(reference.ModelPath)));
     void Save()
     {
         if(busy)return;

@@ -75,7 +75,8 @@ public static class ReferenceModelDoc
             children.Items.RemoveAll(v=>v is KvObject o&&o.GetString("_class")==kind);
             children.Items.Add(category);
         }
-        if(stock)foreach(string key in new[]{"anim_graph_name","default_anim","base_model_name"})if(source.GetOrNull(key) is {} value)targetRoot[key]=value;
+        // animation_graph_name is the reference's AnimGraph2 graph; AnimGraph1 references have none, so their output is unchanged.
+        if(stock)foreach(string key in new[]{"anim_graph_name","animation_graph_name","default_anim","base_model_name"})if(source.GetOrNull(key) is {} value)targetRoot[key]=value;
         targetRoot["note"]=new KvString(reference.Compatibility(rig));
         return Kv3.Serialize(target);
     }
